@@ -1,0 +1,11 @@
+la_smart_dining_radar:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('BQ_DATASET_MART') }}"
+      keyfile: "{{ env_var('GCP_CREDENTIALS_PATH') }}"
+      location: US
+      threads: 4

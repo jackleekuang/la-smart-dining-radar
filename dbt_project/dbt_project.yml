@@ -1,0 +1,14 @@
+name: 'la_smart_dining_radar'
+version: '1.0.0'
+config-version: 2
+profile: 'la_smart_dining_radar'
+
+model-paths: ["models"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  la_smart_dining_radar:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

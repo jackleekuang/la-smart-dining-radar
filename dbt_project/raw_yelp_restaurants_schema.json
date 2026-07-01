@@ -1,0 +1,11 @@
+[
+  {"name": "id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "name", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "rating", "type": "FLOAT", "mode": "NULLABLE"},
+  {"name": "review_count", "type": "INTEGER", "mode": "NULLABLE"},
+  {"name": "price", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "categories", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "latitude", "type": "FLOAT", "mode": "NULLABLE"},
+  {"name": "longitude", "type": "FLOAT", "mode": "NULLABLE"},
+  {"name": "ingestion_timestamp", "type": "TIMESTAMP", "mode": "NULLABLE"}
+]

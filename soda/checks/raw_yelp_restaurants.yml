@@ -1,0 +1,6 @@
+checks for raw_yelp_restaurants:
+  - row_count > 0
+  - missing_count(id) = 0
+  - invalid_percent(rating) = 0%:
+      valid min: 0
+      valid max: 5

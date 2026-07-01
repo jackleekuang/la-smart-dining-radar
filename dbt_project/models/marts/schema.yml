@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: dim_restaurants
+    description: "Deduplicated restaurant dimension with a calculated popularity_score."
+    columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
+      - name: rating
+        tests:
+          - not_null
+      - name: popularity_score
+        tests:
+          - not_null

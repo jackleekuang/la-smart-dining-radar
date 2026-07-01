@@ -1,0 +1,24 @@
+# --- Data Source (Yelp Fusion API) ---
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# --- Data Warehouse (BigQuery) ---
+google-cloud-bigquery>=3.25.0
+db-dtypes>=1.2.0
+pandas>=2.2.0
+
+# --- Orchestration ---
+prefect>=2.19.0
+
+# --- Transformation ---
+dbt-core>=1.8.0
+dbt-bigquery>=1.8.0
+
+# --- Data Quality ---
+soda-core-bigquery>=3.3.0
+
+# --- Front-End ---
+streamlit>=1.35.0
+
+# --- Utilities ---
+pyyaml>=6.0

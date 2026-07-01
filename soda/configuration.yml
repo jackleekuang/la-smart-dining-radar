@@ -1,0 +1,6 @@
+data_source dining_radar:
+  type: bigquery
+  connection:
+    account_info_json_path: "${GCP_CREDENTIALS_PATH}"
+    project_id: "${GCP_PROJECT_ID}"
+    dataset: "${BQ_DATASET_RAW}"
