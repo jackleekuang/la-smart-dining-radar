@@ -19,6 +19,16 @@ select
     categories,
     latitude,
     longitude,
-    ingestion_timestamp
+    ingestion_timestamp,
+    is_closed,
+    address1,
+    address2,
+    address3,
+    city,
+    zip_code,
+    state,
+    country,
+    transactions,
+    business_hours
 from deduped
 where row_num = 1

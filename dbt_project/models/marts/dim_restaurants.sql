@@ -12,5 +12,16 @@ select
     latitude,
     longitude,
     round(rating * ln(review_count + 1), 3) as popularity_score,
+    is_closed,
+    address1,
+    address2,
+    address3,
+    city,
+    zip_code,
+    state,
+    country,
+    transactions,
+    business_hours,
     ingestion_timestamp
 from staged
+where is_closed = false

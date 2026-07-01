@@ -21,6 +21,7 @@ def get_bigquery_client() -> bigquery.Client:
 def _to_raw_row(business: dict[str, Any]) -> dict[str, Any]:
     """Map a raw Yelp business dict to the raw_yelp_restaurants schema."""
     coordinates = business.get("coordinates") or {}
+    location = business.get("location") or {}
     return {
         "id": business.get("id"),
         "name": business.get("name"),
@@ -31,6 +32,16 @@ def _to_raw_row(business: dict[str, Any]) -> dict[str, Any]:
         "latitude": coordinates.get("latitude"),
         "longitude": coordinates.get("longitude"),
         "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
+        "is_closed": business.get("is_closed"),
+        "address1": location.get("address1"),
+        "address2": location.get("address2"),
+        "address3": location.get("address3"),
+        "city": location.get("city"),
+        "zip_code": location.get("zip_code"),
+        "state": location.get("state"),
+        "country": location.get("country"),
+        "transactions": business.get("transactions", []),
+        "business_hours": json.dumps(business.get("business_hours", [])),
     }
 
 
@@ -52,8 +63,8 @@ def load_restaurants(businesses: list[dict[str, Any]]) -> None:
 
 
 if __name__ == "__main__":
-    from src.extract.yelp_api import fetch_restaurants
+    from src.extract.yelp_api import fetch_all_restaurants
 
-    fetched = fetch_restaurants()
+    fetched = fetch_all_restaurants()
     load_restaurants(fetched)
     print(f"Loaded {len(fetched)} restaurants into {BQ_DATASET_RAW}.{RAW_TABLE_ID}")
