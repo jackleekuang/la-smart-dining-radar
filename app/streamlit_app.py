@@ -19,6 +19,28 @@ from src.load.bigquery_loader import get_bigquery_client
 st.set_page_config(page_title="LA Smart Dining Radar", layout="wide")
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+TRANSACTION_LABELS = {
+    "delivery": "Delivery",
+    "pickup": "Pickup",
+    "restaurant_reservation": "Reservations",
+}
+TABLE_COLUMNS = [
+    "id",
+    "name",
+    "city",
+    "category_titles",
+    "transactions",
+    "price",
+    "rating",
+    "review_count",
+    "popularity_score",
+    "address1",
+    "address2",
+    "address3",
+    "zip_code",
+    "state",
+    "country",
+]
 
 
 @st.cache_data(ttl=600)
@@ -52,11 +74,16 @@ df = load_dim_restaurants()
 
 st.sidebar.header("Filters")
 
-all_transactions = sorted({t for row in df["transactions"] for t in (row if row is not None else [])})
-selected_transactions = st.sidebar.multiselect("Transactions", all_transactions)
-
 all_cities = sorted(df["city"].dropna().unique())
 selected_cities = st.sidebar.multiselect("City", all_cities)
+
+all_categories = sorted({c for row in df["category_titles"] for c in (row if row is not None else [])})
+selected_categories = st.sidebar.multiselect("Category", all_categories)
+
+all_transactions = sorted({t for row in df["transactions"] for t in (row if row is not None else [])})
+selected_transactions = st.sidebar.multiselect(
+    "Transactions", all_transactions, format_func=lambda t: TRANSACTION_LABELS.get(t, t)
+)
 
 st.sidebar.markdown("---")
 filter_by_hours = st.sidebar.checkbox("Filter by open day & time")
@@ -67,14 +94,20 @@ if filter_by_hours:
     selected_time = st.sidebar.time_input("Time", value=datetime.time(19, 0))
 
 filtered = df.copy()
+if selected_cities:
+    filtered = filtered[filtered["city"].isin(selected_cities)]
+if selected_categories:
+    filtered = filtered[
+        filtered["category_titles"].apply(
+            lambda cs: any(c in cs for c in selected_categories) if cs is not None else False
+        )
+    ]
 if selected_transactions:
     filtered = filtered[
         filtered["transactions"].apply(
             lambda ts: any(t in ts for t in selected_transactions) if ts is not None else False
         )
     ]
-if selected_cities:
-    filtered = filtered[filtered["city"].isin(selected_cities)]
 
 if filter_by_hours and selected_day is not None and selected_time is not None:
     hours_df = load_hours()
@@ -89,7 +122,12 @@ subtitle = f"{len(filtered)} restaurants"
 if len(filtered) != len(df):
     subtitle += f" (of {len(df)} total)"
 st.subheader(subtitle)
-st.dataframe(filtered, width="stretch")
+
+table = filtered[TABLE_COLUMNS].reset_index(drop=True).copy()
+table["transactions"] = table["transactions"].apply(
+    lambda ts: [TRANSACTION_LABELS.get(t, t) for t in ts] if ts is not None else ts
+)
+st.dataframe(table, width="stretch")
 
 st.subheader("Map")
 m = folium.Map(location=[34.06, -118.28], zoom_start=11)
