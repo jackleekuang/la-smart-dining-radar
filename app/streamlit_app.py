@@ -36,6 +36,7 @@ TABLE_COLUMNS = [
     "popularity_score",
     "zip_code",
 ]
+DISPLAY_COLUMNS = [c for c in TABLE_COLUMNS if c != "id"]
 DEFAULT_MAP_CENTER = [34.06, -118.28]
 DEFAULT_MAP_ZOOM = 11
 
@@ -47,19 +48,11 @@ HELP_TEXT = """
 **表格 → 地圖**
 1. 點表格裡的一列選取該餐廳
 2. 按「🔍 在地圖上定位選取的餐廳」,地圖會直接跳到該餐廳並標紅星號
-
-**地圖 → 表格**
-1. 在地圖上縮放/拖曳到你想看的區域
-2. 按「📍 依目前地圖範圍篩選表格」,表格只會顯示目前地圖畫面內的餐廳
-3. 按「↺ 清除地圖範圍篩選」恢復顯示全部篩選結果
 """
 
-if "focus_id" not in st.session_state:
-    st.session_state.focus_id = None
-if "map_bounds" not in st.session_state:
-    st.session_state.map_bounds = None
-if "use_map_bounds_filter" not in st.session_state:
-    st.session_state.use_map_bounds_filter = False
+for key, default in [("focus_id", None), ("selected_id", None)]:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 
 @st.cache_data(ttl=600)
@@ -87,6 +80,98 @@ def _is_open_at(row: pd.Series, at_time: datetime.time) -> bool:
     if row["is_overnight"]:
         return at_time >= row["start_time"] or at_time <= row["end_time"]
     return row["start_time"] <= at_time <= row["end_time"]
+
+
+def _build_map(filtered: pd.DataFrame, focus_row: pd.Series | None) -> folium.Map:
+    """Construct the Folium map for the current filtered restaurant set (expensive; caller should cache)."""
+    if focus_row is not None:
+        m = folium.Map(location=[focus_row["latitude"], focus_row["longitude"]], zoom_start=17)
+        folium.Marker(
+            location=[focus_row["latitude"], focus_row["longitude"]],
+            popup=folium.Popup(f"<b>{focus_row['name']}</b>", max_width=250),
+            tooltip=focus_row["name"],
+            icon=folium.Icon(color="red", icon="star"),
+        ).add_to(m)
+    else:
+        m = folium.Map(location=DEFAULT_MAP_CENTER, zoom_start=DEFAULT_MAP_ZOOM)
+
+    cluster = MarkerCluster().add_to(m)
+    for _, row in filtered.iterrows():
+        if pd.isna(row["latitude"]) or pd.isna(row["longitude"]):
+            continue
+        popup_html = (
+            f"<b>{row['name']}</b><br>"
+            f"⭐ {row['rating']} ({row['review_count']} reviews)<br>"
+            f"{row['price']}<br>"
+            f"{row['address1']}, {row['city']}"
+        )
+        folium.Marker(
+            location=[row["latitude"], row["longitude"]],
+            popup=folium.Popup(popup_html, max_width=250),
+            tooltip=row["name"],
+        ).add_to(cluster)
+    return m
+
+
+@st.fragment
+def render_table(filtered: pd.DataFrame, df: pd.DataFrame) -> None:
+    """Render KPIs + table in their own fragment so row selection never rebuilds the map.
+
+    The "locate on map" button is the one action here that needs to affect the
+    sibling map fragment, so it does a full app rerun (st.rerun(), default
+    scope="app") -- everything else here stays fragment-scoped and cheap.
+    """
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1.metric("Restaurants", len(filtered))
+    kpi2.metric("Avg Rating", f"{filtered['rating'].mean():.2f}" if len(filtered) else "–")
+    kpi3.metric("Avg Popularity", f"{filtered['popularity_score'].mean():.1f}" if len(filtered) else "–")
+    kpi4.metric("Cities", filtered["city"].nunique())
+
+    subtitle = f"{len(filtered)} restaurants"
+    if len(filtered) != len(df):
+        subtitle += f" (of {len(df)} total)"
+    st.subheader(subtitle)
+
+    table = filtered[TABLE_COLUMNS].reset_index(drop=True).copy()
+    table["transactions"] = table["transactions"].apply(
+        lambda ts: [TRANSACTION_LABELS.get(t, t) for t in ts] if ts is not None else ts
+    )
+    event = st.dataframe(
+        table,
+        width="stretch",
+        on_select="rerun",
+        selection_mode="single-row",
+        column_order=DISPLAY_COLUMNS,
+        key="restaurant_table",
+    )
+    selected_rows = event.selection.rows if event and event.selection else []
+    st.session_state.selected_id = table.iloc[selected_rows[0]]["id"] if selected_rows else None
+
+    if st.button("🔍 在地圖上定位選取的餐廳", disabled=st.session_state.selected_id is None):
+        st.session_state.focus_id = st.session_state.selected_id
+        st.rerun()  # full rerun: the map fragment below needs the new focus_id
+
+
+@st.fragment
+def render_map(filtered: pd.DataFrame, df: pd.DataFrame) -> None:
+    """Render the map in its own fragment so panning/zooming never rebuilds the table."""
+    st.subheader("Map")
+
+    focus_row = None
+    if st.session_state.focus_id is not None:
+        match = df[df["id"] == st.session_state.focus_id]
+        if not match.empty:
+            focus_row = match.iloc[0]
+
+    m = _build_map(filtered, focus_row)
+    # zoom/center (not the folium.Map's own location/zoom_start) are what
+    # streamlit-folium actually honors as *dynamic* view updates on rerun;
+    # the map object's own values only apply the first time it mounts.
+    if focus_row is not None:
+        zoom, center = 17, (focus_row["latitude"], focus_row["longitude"])
+    else:
+        zoom, center = DEFAULT_MAP_ZOOM, tuple(DEFAULT_MAP_CENTER)
+    st_folium(m, width=1300, height=600, key="main_map", zoom=zoom, center=center)
 
 
 df = load_dim_restaurants()
@@ -127,7 +212,6 @@ if selected_transactions:
             lambda ts: any(t in ts for t in selected_transactions) if ts is not None else False
         )
     ]
-
 if filter_by_hours and selected_day is not None and selected_time is not None:
     hours_df = load_hours()
     day_hours = hours_df[hours_df["day_of_week"] == DAY_NAMES.index(selected_day)]
@@ -135,82 +219,12 @@ if filter_by_hours and selected_day is not None and selected_time is not None:
     open_ids = set(day_hours.loc[open_mask, "restaurant_id"])
     filtered = filtered[filtered["id"].isin(open_ids)]
 
-# Must be applied here (before the table renders) so the toggle set by the
-# button further down takes effect on the rerun it triggers.
-if st.session_state.use_map_bounds_filter and st.session_state.map_bounds:
-    (south, west), (north, east) = st.session_state.map_bounds
-    filtered = filtered[
-        filtered["latitude"].between(south, north) & filtered["longitude"].between(west, east)
-    ]
+title_col, help_col = st.columns([5, 1])
+with title_col:
+    st.title("🍽️ LA Smart Dining Radar")
+with help_col:
+    with st.popover("❓ 使用說明"):
+        st.markdown(HELP_TEXT)
 
-st.title("🍽️ LA Smart Dining Radar")
-with st.popover("❓ 使用說明"):
-    st.markdown(HELP_TEXT)
-
-subtitle = f"{len(filtered)} restaurants"
-if len(filtered) != len(df):
-    subtitle += f" (of {len(df)} total)"
-if st.session_state.use_map_bounds_filter:
-    subtitle += " — 已依地圖範圍篩選"
-st.subheader(subtitle)
-
-table = filtered[TABLE_COLUMNS].reset_index(drop=True).copy()
-table["transactions"] = table["transactions"].apply(
-    lambda ts: [TRANSACTION_LABELS.get(t, t) for t in ts] if ts is not None else ts
-)
-event = st.dataframe(table, width="stretch", on_select="rerun", selection_mode="single-row", key="restaurant_table")
-
-selected_rows = event.selection.rows if event and event.selection else []
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("🔍 在地圖上定位選取的餐廳", disabled=not selected_rows):
-        st.session_state.focus_id = table.iloc[selected_rows[0]]["id"]
-with col2:
-    if st.button("📍 依目前地圖範圍篩選表格", disabled=st.session_state.map_bounds is None):
-        st.session_state.use_map_bounds_filter = True
-        st.rerun()
-with col3:
-    if st.button("↺ 清除地圖範圍篩選", disabled=not st.session_state.use_map_bounds_filter):
-        st.session_state.use_map_bounds_filter = False
-        st.rerun()
-
-st.subheader("Map")
-
-focus_row = None
-if st.session_state.focus_id is not None:
-    match = df[df["id"] == st.session_state.focus_id]
-    if not match.empty:
-        focus_row = match.iloc[0]
-
-if focus_row is not None:
-    m = folium.Map(location=[focus_row["latitude"], focus_row["longitude"]], zoom_start=17)
-    folium.Marker(
-        location=[focus_row["latitude"], focus_row["longitude"]],
-        popup=folium.Popup(f"<b>{focus_row['name']}</b>", max_width=250),
-        tooltip=focus_row["name"],
-        icon=folium.Icon(color="red", icon="star"),
-    ).add_to(m)
-else:
-    m = folium.Map(location=DEFAULT_MAP_CENTER, zoom_start=DEFAULT_MAP_ZOOM)
-
-cluster = MarkerCluster().add_to(m)
-for _, row in filtered.iterrows():
-    if pd.isna(row["latitude"]) or pd.isna(row["longitude"]):
-        continue
-    popup_html = (
-        f"<b>{row['name']}</b><br>"
-        f"⭐ {row['rating']} ({row['review_count']} reviews)<br>"
-        f"{row['price']}<br>"
-        f"{row['address1']}, {row['city']}"
-    )
-    folium.Marker(
-        location=[row["latitude"], row["longitude"]],
-        popup=folium.Popup(popup_html, max_width=250),
-        tooltip=row["name"],
-    ).add_to(cluster)
-
-map_data = st_folium(m, width=1300, height=600, key="main_map")
-if map_data and map_data.get("bounds"):
-    sw = map_data["bounds"]["_southWest"]
-    ne = map_data["bounds"]["_northEast"]
-    st.session_state.map_bounds = ((sw["lat"], sw["lng"]), (ne["lat"], ne["lng"]))
+render_table(filtered, df)
+render_map(filtered, df)
