@@ -19,6 +19,11 @@ soda-core-bigquery>=3.3.0
 
 # --- Front-End ---
 streamlit>=1.35.0
+folium>=0.16.0
+streamlit-folium>=0.22.0
 
 # --- Utilities ---
 pyyaml>=6.0
+
+# --- Testing ---
+pytest>=8.0.0
