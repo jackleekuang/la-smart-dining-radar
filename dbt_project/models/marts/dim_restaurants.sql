@@ -1,5 +1,5 @@
 with staged as (
-    select * from {{ ref('stg_yelp_restaurants') }}
+    select * from {{ ref('int_restaurants_city_mapped') }}
 )
 
 select
@@ -21,6 +21,7 @@ select
     address2,
     address3,
     city,
+    city_raw,
     zip_code,
     state,
     country,

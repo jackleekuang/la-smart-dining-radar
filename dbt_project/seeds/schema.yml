@@ -1,0 +1,15 @@
+version: 2
+
+seeds:
+  - name: city_alias_map
+    description: >
+      Maintained crosswalk from a rule-cleaned city value to its canonical
+      name, for aliases (abbreviations, alternate spellings) that generic
+      whitespace/casing rules can't resolve. Add a row here when a new
+      alias surfaces via the known_la_cities relationships test.
+  - name: known_la_cities
+    description: >
+      Reference list of accepted canonical city values in dim_restaurants.
+      Used by a warn-severity relationships test so a new/unrecognized city
+      surfaces for review instead of silently blending into the dashboard's
+      City filter or silently failing the whole pipeline run.

@@ -17,6 +17,15 @@ models:
       - name: is_closed
         tests:
           - not_null
+      - name: city
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('known_la_cities')
+                field: city
+              config:
+                severity: warn
 
   - name: fct_restaurant_hours
     description: "One row per restaurant per open time period, exploded from dim_restaurants.business_hours."
