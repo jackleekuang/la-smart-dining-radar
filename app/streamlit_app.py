@@ -6,12 +6,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import datetime
+import os
 
 import folium
 import pandas as pd
 import streamlit as st
 from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
+
+# On Streamlit Community Cloud, config only arrives via st.secrets (pasted in
+# the app dashboard), not a .env file. Mirror it into the environment before
+# importing src.config, which reads plain env vars via os.getenv().
+for _key, _value in st.secrets.items():
+    os.environ.setdefault(_key, str(_value))
 
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
 from src.load.bigquery_loader import get_bigquery_client

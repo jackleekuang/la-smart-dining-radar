@@ -1,6 +1,7 @@
 """BigQuery write/load logic for the raw layer."""
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,11 +16,18 @@ RAW_TABLE_ID = "raw_yelp_restaurants"
 def get_bigquery_client() -> bigquery.Client:
     """Build a BigQuery client.
 
-    Locally, authenticates via the service account key file at
-    GCP_CREDENTIALS_PATH. In Cloud Run, that env var is unset, so this falls
-    back to Application Default Credentials from the job's attached service
-    account -- no key file involved.
+    Three ways to authenticate, tried in order:
+    1. GCP_CREDENTIALS_JSON -- raw key JSON content via an env var, for hosts
+       (e.g. Streamlit Community Cloud) that only accept pasted secrets, not
+       file uploads or an attached GCP identity.
+    2. GCP_CREDENTIALS_PATH -- a service account key file, for local dev.
+    3. Application Default Credentials from an attached identity (Cloud Run).
     """
+    credentials_json = os.getenv("GCP_CREDENTIALS_JSON")
+    if credentials_json:
+        info = json.loads(credentials_json)
+        credentials = service_account.Credentials.from_service_account_info(info)
+        return bigquery.Client(project=GCP_PROJECT_ID, credentials=credentials)
     if GCP_CREDENTIALS_PATH:
         credentials = service_account.Credentials.from_service_account_file(GCP_CREDENTIALS_PATH)
         return bigquery.Client(project=GCP_PROJECT_ID, credentials=credentials)
