@@ -13,9 +13,17 @@ RAW_TABLE_ID = "raw_yelp_restaurants"
 
 
 def get_bigquery_client() -> bigquery.Client:
-    """Build a BigQuery client authenticated with the configured service account."""
-    credentials = service_account.Credentials.from_service_account_file(GCP_CREDENTIALS_PATH)
-    return bigquery.Client(project=GCP_PROJECT_ID, credentials=credentials)
+    """Build a BigQuery client.
+
+    Locally, authenticates via the service account key file at
+    GCP_CREDENTIALS_PATH. In Cloud Run, that env var is unset, so this falls
+    back to Application Default Credentials from the job's attached service
+    account -- no key file involved.
+    """
+    if GCP_CREDENTIALS_PATH:
+        credentials = service_account.Credentials.from_service_account_file(GCP_CREDENTIALS_PATH)
+        return bigquery.Client(project=GCP_PROJECT_ID, credentials=credentials)
+    return bigquery.Client(project=GCP_PROJECT_ID)
 
 
 def _to_raw_row(business: dict[str, Any]) -> dict[str, Any]:

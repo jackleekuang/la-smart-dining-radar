@@ -12,7 +12,6 @@ from src.load.bigquery_loader import load_restaurants
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 VENV_BIN = Path(sys.executable).parent
-QUARTERLY_CRON = "0 6 1 1,4,7,10 *"  # Jan/Apr/Jul/Oct 1st at 06:00
 
 
 @task
@@ -60,14 +59,6 @@ def dining_radar_pipeline() -> None:
     load_task(businesses)
     soda_scan_task()
     dbt_run_task()
-
-
-def serve_pipeline() -> None:
-    """Start a long-running Prefect process that triggers the pipeline quarterly.
-
-    Requires a persistently running host; not invoked automatically.
-    """
-    dining_radar_pipeline.serve(name="la-dining-radar-quarterly", cron=QUARTERLY_CRON)
 
 
 if __name__ == "__main__":

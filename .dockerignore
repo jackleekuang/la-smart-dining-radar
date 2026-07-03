@@ -1,0 +1,13 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+.env
+gcp-service-account.json
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+app/
+tests/
+.streamlit/
