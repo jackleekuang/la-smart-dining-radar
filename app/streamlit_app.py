@@ -25,6 +25,12 @@ from src.load.bigquery_loader import get_bigquery_client
 
 st.set_page_config(page_title="LA Smart Dining Radar", layout="wide")
 
+# TEMP DEBUG -- remove once the NotFound deployment issue is diagnosed.
+st.caption(
+    f"DEBUG secrets keys={list(st.secrets.keys())!r} "
+    f"GCP_PROJECT_ID={GCP_PROJECT_ID!r} BQ_DATASET_MART={BQ_DATASET_MART!r}"
+)
+
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 TRANSACTION_LABELS = {
     "delivery": "Delivery",
