@@ -48,13 +48,13 @@ DEFAULT_MAP_CENTER = [34.06, -118.28]
 DEFAULT_MAP_ZOOM = 11
 
 HELP_TEXT = """
-**篩選器(左側)**
-- City / Category / Transactions:多選,交集篩選
-- 「Filter by open day & time」:選星期+時段,只留當下有營業的餐廳
+**Filters (left sidebar)**
+- City / Category / Transactions: multi-select, filters are combined with AND
+- "Filter by open day & time": pick a day + time to show only restaurants open at that moment
 
-**表格 → 地圖**
-1. 點表格裡的一列選取該餐廳
-2. 按「🔍 在地圖上定位選取的餐廳」,地圖會直接跳到該餐廳並標紅星號
+**Table → Map**
+1. Click a row in the table to select that restaurant
+2. Click "🔍 Locate selected restaurant on map" — the map jumps to it and marks it with a red star
 """
 
 for key, default in [("focus_id", None), ("selected_id", None)]:
@@ -154,7 +154,7 @@ def render_table(filtered: pd.DataFrame, df: pd.DataFrame) -> None:
     selected_rows = event.selection.rows if event and event.selection else []
     st.session_state.selected_id = table.iloc[selected_rows[0]]["id"] if selected_rows else None
 
-    if st.button("🔍 在地圖上定位選取的餐廳", disabled=st.session_state.selected_id is None):
+    if st.button("🔍 Locate selected restaurant on map", disabled=st.session_state.selected_id is None):
         st.session_state.focus_id = st.session_state.selected_id
         st.rerun()  # full rerun: the map fragment below needs the new focus_id
 
@@ -230,7 +230,7 @@ title_col, help_col = st.columns([5, 1])
 with title_col:
     st.title("🍽️ LA Smart Dining Radar")
 with help_col:
-    with st.popover("❓ 使用說明"):
+    with st.popover("❓ Help"):
         st.markdown(HELP_TEXT)
 
 render_table(filtered, df)

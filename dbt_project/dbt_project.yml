@@ -10,5 +10,7 @@ models:
   la_smart_dining_radar:
     staging:
       +materialized: view
+    intermediate:
+      +materialized: view
     marts:
       +materialized: table

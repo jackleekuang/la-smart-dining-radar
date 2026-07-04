@@ -1,0 +1,8 @@
+version: 2
+
+models:
+  - name: int_restaurants_city_mapped
+    description: >
+      Applies city_alias_map to stg_yelp_restaurants' rule-cleaned city column,
+      resolving known abbreviations/aliases (e.g. "W Hollywood") that
+      whitespace/casing rules alone can't fix.

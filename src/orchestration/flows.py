@@ -43,6 +43,16 @@ def soda_scan_task() -> None:
 
 
 @task
+def dbt_seed_task() -> None:
+    """Load dbt seeds (e.g. the city alias/reference lookups) into BigQuery."""
+    subprocess.run(
+        [str(VENV_BIN / "dbt"), "seed", "--project-dir", "dbt_project", "--profiles-dir", "dbt_project"],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+
+
+@task
 def dbt_run_task() -> None:
     """Run dbt models to (re)build the mart layer from the raw layer."""
     subprocess.run(
@@ -52,13 +62,30 @@ def dbt_run_task() -> None:
     )
 
 
+@task
+def dbt_test_task() -> None:
+    """Run dbt tests to validate the mart layer after a rebuild.
+
+    Failures here (e.g. an unrecognized city value) are the pipeline's main
+    quality gate against the mart layer -- distinct from soda_scan_task, which
+    only guards the raw layer before any transformation runs.
+    """
+    subprocess.run(
+        [str(VENV_BIN / "dbt"), "test", "--project-dir", "dbt_project", "--profiles-dir", "dbt_project"],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+
+
 @flow(name="la-dining-radar-pipeline")
 def dining_radar_pipeline() -> None:
-    """MVP pipeline: extract -> load -> soda scan (quality gate) -> dbt run."""
+    """MVP pipeline: extract -> load -> soda scan (quality gate) -> dbt seed/run/test."""
     businesses = extract_task()
     load_task(businesses)
     soda_scan_task()
+    dbt_seed_task()
     dbt_run_task()
+    dbt_test_task()
 
 
 if __name__ == "__main__":
