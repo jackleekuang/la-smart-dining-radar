@@ -1,5 +1,8 @@
 # 🍽️ LA Smart Dining Radar
 
+> **v2 in progress (branch `v2-open-data`):** an open-data restaurant landscape monitor that reconciles
+> Overture Maps Places with the LA City business registry — see [`docs/v2-design.md`](docs/v2-design.md).
+
 An end-to-end **Modern Data Stack (MDS)** project that discovers and analyzes high-rated
 restaurants across Los Angeles. It extracts data from the Yelp Fusion API, warehouses it
 in BigQuery, transforms it with dbt, quality-checks it with Soda + dbt tests, orchestrates

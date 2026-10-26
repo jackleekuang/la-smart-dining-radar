@@ -1,0 +1,40 @@
+# Raw-layer contract for the monthly Overture snapshot. Runs BEFORE dbt.
+# Scope is deliberately different from dbt tests: these guard what arrives from outside
+# (shape, freshness, volume vs. the previous release); dbt tests guard our model logic.
+checks for raw_overture_places:
+  - schema:
+      name: Overture raw table keeps its contract
+      fail:
+        when required column missing: [place_id, payload, snapshot_release, snapshot_date, lon, lat]
+        when wrong column type:
+          place_id: STRING
+          payload: STRING
+          snapshot_date: DATE
+  - row_count > 0
+  - missing_count(place_id) = 0
+  - missing_count(lat) = 0:
+      name: Every place has coordinates
+  - freshness(snapshot_date) < 45d:
+      name: A release landed within the last 45 days
+  # Volume vs. previous release. A sudden drop usually means an upstream filter or schema
+  # change, not 30% of LA restaurants closing in a month.
+  - latest_vs_previous_pct between -30 and 30:
+      name: Release-over-release row count change within ±30%
+      latest_vs_previous_pct query: |
+        WITH counts AS (
+          SELECT snapshot_date, COUNT(*) AS n
+          FROM raw_overture_places
+          GROUP BY snapshot_date
+        ), ranked AS (
+          SELECT n, ROW_NUMBER() OVER (ORDER BY snapshot_date DESC) AS rn FROM counts
+        )
+        SELECT COALESCE(
+          100 * SAFE_DIVIDE(MAX(IF(rn = 1, n, NULL)) - MAX(IF(rn = 2, n, NULL)), MAX(IF(rn = 2, n, NULL))),
+          0)
+        FROM ranked
+  - duplicates_pct_in_latest = 0:
+      name: No duplicate place_id within the latest release
+      duplicates_pct_in_latest query: |
+        SELECT COALESCE(100 * (1 - SAFE_DIVIDE(COUNT(DISTINCT place_id), COUNT(*))), 0)
+        FROM raw_overture_places
+        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM raw_overture_places)

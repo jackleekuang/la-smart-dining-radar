@@ -1,0 +1,19 @@
+# Raw-layer contract for the LA City business registry (incremental, append-only loads).
+checks for raw_la_city_businesses:
+  - schema:
+      name: LA City raw table keeps its contract
+      fail:
+        when required column missing: [payload, source_updated_at, _loaded_at]
+  - row_count > 0
+  - missing_count(payload) = 0
+  - freshness(_loaded_at) < 40d:
+      name: Loaded within the last 40 days (monthly source)
+  # The payload is stored as-is, so a renamed upstream column would not break the load.
+  # This check catches it here instead: the business id must still be present in the JSON.
+  - payload_missing_account_pct < 1:
+      name: Upstream still sends location_account
+      payload_missing_account_pct query: |
+        SELECT COALESCE(100 * SAFE_DIVIDE(
+          COUNTIF(JSON_VALUE(payload, '$.location_account') IS NULL), COUNT(*)), 0)
+        FROM raw_la_city_businesses
+        WHERE _loaded_at = (SELECT MAX(_loaded_at) FROM raw_la_city_businesses)

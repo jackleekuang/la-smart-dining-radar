@@ -1,0 +1,31 @@
+version: 2
+
+sources:
+  - name: raw_v2
+    tags: ['v2']
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: "{{ env_var('BQ_DATASET_RAW') }}"
+    description: Raw landing tables written by src/orchestration/flows_v2.py. Payloads are stored as JSON (ELT).
+    tables:
+      - name: raw_overture_places
+        description: >
+          Monthly snapshots of Overture Maps Places (LA bounding box, coarse food filter).
+          The public BigQuery mirror only keeps the latest release, so history exists only here.
+        loaded_at_field: _loaded_at
+        freshness:
+          warn_after: {count: 35, period: day}
+          error_after: {count: 60, period: day}
+        columns:
+          - name: place_id
+            description: Overture GERS id.
+            tests: [not_null]
+          - name: snapshot_release
+            tests: [not_null]
+      - name: raw_la_city_businesses
+        description: LA City Office of Finance business registry, NAICS 722 only, incremental by Socrata :updated_at.
+        loaded_at_field: _loaded_at
+        freshness:
+          warn_after: {count: 35, period: day}
+        columns:
+          - name: payload
+            tests: [not_null]
