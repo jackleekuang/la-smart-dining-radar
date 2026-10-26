@@ -87,6 +87,14 @@ Orchestration: Prefect 3 flow `dineradar-v2-landscape`, monthly (`serve`, cron 0
 
 ## Run book
 
+First real run, every step logged and a read-only health report at the end:
+
+```bash
+bash scripts/v2_first_run.sh        # writes run_logs/<timestamp>/summary.txt and report.md
+```
+
+Individual commands:
+
 ```bash
 pip install -r requirements.txt
 export GCP_PROJECT_ID=... BQ_DATASET_RAW=raw BQ_DATASET_MART=mart GCP_CREDENTIALS_PATH=...
