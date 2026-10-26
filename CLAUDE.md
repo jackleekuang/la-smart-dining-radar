@@ -134,7 +134,14 @@ steps are manual. Documenting/scripting them is a good next task.
 3. **README.md is a spec/template, not current docs** — raw-schema table is stale, has a
    "Project Structure … to be generated" placeholder, and no setup/run/deploy instructions.
    Refresh it (or point it at this file).
-4. No CI / linter / pre-commit. Tests (6) pass and cover extract + raw mapping only; there
+4. **Yelp API terms vs. this design.** The Yelp API Terms of Use (version dated 2025-01-13, §5)
+   allow caching Yelp content for at most 24 hours (business IDs excepted) and forbid using it
+   to build your own database of business listings. The append-only raw table and quarterly
+   marts keep Yelp content far longer. This is the reason v2 (branch `v2-open-data`) moves to
+   Overture Maps + LA City open data. The dashboard now credits Yelp in the header; the Display
+   Requirements also ask for the Yelp logo and per-business links, which needs the Yelp `url`
+   field loaded (it is dropped in `src/load/bigquery_loader.py` today).
+5. No CI / linter / pre-commit. Tests cover extract, raw mapping and the dashboard open-hours filter (`app/hours.py`); there
    is no test for the Streamlit layer beyond dbt's own tests.
 
 ## Conventions
