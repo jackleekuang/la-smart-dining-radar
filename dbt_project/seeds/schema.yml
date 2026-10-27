@@ -13,3 +13,15 @@ seeds:
       Used by a warn-severity relationships test so a new/unrecognized city
       surfaces for review instead of silently blending into the dashboard's
       City filter or silently failing the whole pipeline run.
+  - name: service_area_zip3
+    description: >
+      3-digit ZIP prefixes covering Los Angeles County (900-918, 935). A coarse
+      sanity gate used together with the service_area bounding box; a few
+      prefixes (e.g. 906, 907, 917) also cover slivers of neighbouring
+      counties, which the bounding box does not fully exclude -- acceptable for
+      this dashboard's purpose.
+    columns:
+      - name: zip3
+        tests:
+          - unique
+          - not_null

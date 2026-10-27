@@ -2,19 +2,38 @@ version: 2
 
 models:
   - name: dim_restaurants
-    description: "Deduplicated restaurant dimension with a calculated popularity_score."
+    description: >
+      Deduplicated, open, in-service-area restaurant dimension with a calculated
+      popularity_score. Unrated restaurants (Yelp rating 0) are kept with
+      rating/popularity_score = NULL and is_rated = false.
     columns:
       - name: id
         tests:
           - unique
           - not_null
-      - name: rating
-        tests:
-          - not_null
-      - name: popularity_score
+      - name: is_rated
         tests:
           - not_null
       - name: is_closed
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [false]
+                quote: false
+      - name: latitude
+        tests:
+          - not_null
+      - name: longitude
+        tests:
+          - not_null
+      - name: state
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['CA']
+      - name: zip_code
         tests:
           - not_null
       - name: city
@@ -26,6 +45,28 @@ models:
                 field: city
               config:
                 severity: warn
+
+  - name: dq_restaurants_quarantine
+    description: >
+      Restaurants withheld from dim_restaurants because they failed the
+      service-area contract, with the reason. Review this table after each run;
+      the assert_quarantine_share_below_threshold test stops the run if it grows
+      beyond var('max_quarantine_share').
+    columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
+      - name: service_area_issue
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - missing_coordinates
+                  - non_ca_state
+                  - zip_outside_service_area
+                  - coordinates_outside_service_area
 
   - name: fct_restaurant_hours
     description: "One row per restaurant per open time period, exploded from dim_restaurants.business_hours."

@@ -5,7 +5,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import datetime
 import os
 
 import folium
@@ -21,12 +20,18 @@ for _key, _value in st.secrets.items():
     os.environ.setdefault(_key, str(_value))
 
 from app.hours import open_restaurant_ids
+from src.app_helpers import (
+    DAY_NAMES,
+    average_rating_label,
+    default_open_filter,
+    format_rating,
+    restaurant_count_label,
+)
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
 from src.load.bigquery_loader import get_bigquery_client
 
 st.set_page_config(page_title="LA Smart Dining Radar", layout="wide")
 
-DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 TRANSACTION_LABELS = {
     "delivery": "Delivery",
     "pickup": "Pickup",
@@ -103,7 +108,7 @@ def _build_map(filtered: pd.DataFrame, focus_row: pd.Series | None) -> folium.Ma
             continue
         popup_html = (
             f"<b>{row['name']}</b><br>"
-            f"⭐ {row['rating']} ({row['review_count']} reviews)<br>"
+            f"{format_rating(row['rating'])} ({row['review_count']} reviews)<br>"
             f"{row['price']}<br>"
             f"{row['address1']}, {row['city']}"
         )
@@ -125,14 +130,12 @@ def render_table(filtered: pd.DataFrame, df: pd.DataFrame) -> None:
     """
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     kpi1.metric("Restaurants", len(filtered))
-    kpi2.metric("Avg Rating", f"{filtered['rating'].mean():.2f}" if len(filtered) else "–")
-    kpi3.metric("Avg Popularity", f"{filtered['popularity_score'].mean():.1f}" if len(filtered) else "–")
+    kpi2.metric("Avg Rating", average_rating_label(filtered["rating"]))
+    popularity = filtered["popularity_score"].dropna()
+    kpi3.metric("Avg Popularity", f"{popularity.mean():.1f}" if len(popularity) else "–")
     kpi4.metric("Cities", filtered["city"].nunique())
 
-    subtitle = f"{len(filtered)} restaurants"
-    if len(filtered) != len(df):
-        subtitle += f" (of {len(df)} total)"
-    st.subheader(subtitle)
+    st.subheader(restaurant_count_label(len(filtered), len(df)))
 
     table = filtered[TABLE_COLUMNS].reset_index(drop=True).copy()
     table["transactions"] = table["transactions"].apply(
@@ -206,8 +209,9 @@ filter_by_hours = st.sidebar.checkbox("Filter by open day & time")
 selected_day = None
 selected_time = None
 if filter_by_hours:
-    selected_day = st.sidebar.selectbox("Day", DAY_NAMES)
-    selected_time = st.sidebar.time_input("Time", value=datetime.time(19, 0))
+    default_day, default_time = default_open_filter()
+    selected_day = st.sidebar.selectbox("Day", DAY_NAMES, index=default_day)
+    selected_time = st.sidebar.time_input("Time", value=default_time)
 
 filtered = df.copy()
 if selected_cities:

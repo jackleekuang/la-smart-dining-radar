@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      # Parses every model, seed and test (incl. Jinja/vars/refs) without a
+      # warehouse connection, so a broken ref or YAML typo fails the PR.
+      - name: dbt parse
+        env:
+          GCP_PROJECT_ID: ci-placeholder
+          BQ_DATASET_RAW: raw
+          BQ_DATASET_MART: mart
+        run: dbt parse --project-dir dbt_project --profiles-dir dbt_project

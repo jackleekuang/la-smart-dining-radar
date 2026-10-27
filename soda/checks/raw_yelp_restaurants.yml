@@ -1,6 +1,41 @@
+# Raw-layer quality gate: checks what the vendor (Yelp) delivered, before any
+# transformation. Fails stop the pipeline; warnings are logged and the run
+# continues (see src/orchestration/soda_exit.py). The mart-layer contract is
+# enforced separately by dbt tests.
+
 checks for raw_yelp_restaurants:
   - row_count > 0
   - missing_count(id) = 0
+
+  # 0 is Yelp's "no reviews yet" sentinel (converted to NULL in dbt staging);
+  # anything outside 0-5 means the payload format changed.
   - invalid_percent(rating) = 0%:
       valid min: 0
       valid max: 5
+
+  # Delivery freshness. The pipeline runs quarterly, so the newest batch should
+  # never be older than ~one quarter.
+  - freshness(ingestion_timestamp):
+      warn: when > 100d
+      fail: when > 130d
+
+  # Early warning on vendor-side out-of-area records in the latest batch.
+  # dbt quarantines them; a large count means the extractor or the API changed.
+  # Bounding box must match the service_area var in dbt_project/dbt_project.yml.
+  - out_of_area_rows:
+      name: Restaurants outside LA County in the latest batch
+      out_of_area_rows query: |
+        SELECT COUNT(DISTINCT id)
+        FROM raw_yelp_restaurants
+        WHERE ingestion_timestamp >= (
+                SELECT TIMESTAMP_SUB(MAX(ingestion_timestamp), INTERVAL 1 DAY)
+                FROM raw_yelp_restaurants
+              )
+          AND (
+                COALESCE(state, '') != 'CA'
+                OR latitude IS NULL OR longitude IS NULL
+                OR latitude NOT BETWEEN 33.70 AND 34.82
+                OR longitude NOT BETWEEN -118.95 AND -117.65
+              )
+      warn: when > 0
+      fail: when > 100

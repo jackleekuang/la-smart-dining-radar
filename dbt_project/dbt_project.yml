@@ -4,7 +4,24 @@ config-version: 2
 profile: 'la_smart_dining_radar'
 
 model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
 clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Service area = Los Angeles County. A restaurant is published only if its
+  # coordinates fall inside this bounding box AND its state/ZIP agree (see
+  # int_restaurants_service_area). Soda's raw-layer check uses the same box --
+  # keep soda/checks/raw_yelp_restaurants.yml in sync if you change it.
+  service_area:
+    min_lat: 33.70
+    max_lat: 34.82
+    min_lng: -118.95
+    max_lng: -117.65
+  # Anomaly gate: if more than this share of open restaurants fails the
+  # service-area contract, something upstream changed (extractor bug or vendor
+  # behaviour) and the run should stop instead of publishing.
+  max_quarantine_share: 0.02
 
 models:
   la_smart_dining_radar:
@@ -14,3 +31,9 @@ models:
       +materialized: view
     marts:
       +materialized: table
+
+seeds:
+  la_smart_dining_radar:
+    service_area_zip3:
+      +column_types:
+        zip3: string
