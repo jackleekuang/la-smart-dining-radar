@@ -43,3 +43,27 @@ def default_open_filter(now: datetime.datetime | None = None) -> tuple[int, date
     """
     current = (now or datetime.datetime.now(LA_TZ)).astimezone(LA_TZ)
     return current.weekday(), current.time().replace(second=0, microsecond=0)
+
+
+def map_points(restaurants: pd.DataFrame) -> list[list]:
+    """Rows for folium.FastMarkerCluster: [lat, lng, popup_html, tooltip].
+
+    Name, price and address are HTML-escaped (popup and tooltip) because they are
+    vendor-supplied text that Leaflet renders as HTML.
+    """
+    from html import escape
+
+    points: list[list] = []
+    cols = ["latitude", "longitude", "name", "rating", "review_count", "price", "address1", "city"]
+    for lat, lng, name, rating, reviews, price, address, city in restaurants[cols].itertuples(index=False):
+        if pd.isna(lat) or pd.isna(lng):
+            continue
+        reviews_text = "" if pd.isna(reviews) else f" ({int(reviews)} reviews)"
+        popup = (
+            f"<b>{escape(str(name))}</b><br>"
+            f"{format_rating(rating)}{reviews_text}<br>"
+            f"{escape(str(price))}<br>"
+            f"{escape(str(address))}, {escape(str(city))}"
+        )
+        points.append([float(lat), float(lng), popup, escape(str(name))])
+    return points

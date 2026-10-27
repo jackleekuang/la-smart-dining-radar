@@ -10,7 +10,7 @@ import os
 import folium
 import pandas as pd
 import streamlit as st
-from folium.plugins import MarkerCluster
+from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 
 # On Streamlit Community Cloud, config only arrives via st.secrets (pasted in
@@ -24,7 +24,7 @@ from src.app_helpers import (
     DAY_NAMES,
     average_rating_label,
     default_open_filter,
-    format_rating,
+    map_points,
     restaurant_count_label,
 )
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
@@ -52,6 +52,15 @@ TABLE_COLUMNS = [
 DISPLAY_COLUMNS = [c for c in TABLE_COLUMNS if c != "id"]
 DEFAULT_MAP_CENTER = [34.06, -118.28]
 DEFAULT_MAP_ZOOM = 11
+# Leaflet JS run per point by FastMarkerCluster; row = [lat, lng, popup_html, tooltip]
+MARKER_CALLBACK = """
+function (row) {
+    var marker = L.marker(new L.LatLng(row[0], row[1]));
+    marker.bindPopup(row[2], {maxWidth: 250});
+    marker.bindTooltip(row[3]);
+    return marker;
+}
+"""
 
 HELP_TEXT = """
 **Filters (left sidebar)**
@@ -102,21 +111,9 @@ def _build_map(filtered: pd.DataFrame, focus_row: pd.Series | None) -> folium.Ma
     else:
         m = folium.Map(location=DEFAULT_MAP_CENTER, zoom_start=DEFAULT_MAP_ZOOM)
 
-    cluster = MarkerCluster().add_to(m)
-    for _, row in filtered.iterrows():
-        if pd.isna(row["latitude"]) or pd.isna(row["longitude"]):
-            continue
-        popup_html = (
-            f"<b>{row['name']}</b><br>"
-            f"{format_rating(row['rating'])} ({row['review_count']} reviews)<br>"
-            f"{row['price']}<br>"
-            f"{row['address1']}, {row['city']}"
-        )
-        folium.Marker(
-            location=[row["latitude"], row["longitude"]],
-            popup=folium.Popup(popup_html, max_width=250),
-            tooltip=row["name"],
-        ).add_to(cluster)
+    # FastMarkerCluster ships the points as one JSON array and creates the markers
+    # client-side, instead of serializing ~3.7k folium.Marker objects on every rerun.
+    FastMarkerCluster(map_points(filtered), callback=MARKER_CALLBACK).add_to(m)
     return m
 
 
