@@ -20,6 +20,7 @@ from streamlit_folium import st_folium
 for _key, _value in st.secrets.items():
     os.environ.setdefault(_key, str(_value))
 
+from app.hours import open_restaurant_ids
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
 from src.load.bigquery_loader import get_bigquery_client
 
@@ -51,6 +52,7 @@ HELP_TEXT = """
 **Filters (left sidebar)**
 - City / Category / Transactions: multi-select, filters are combined with AND
 - "Filter by open day & time": pick a day + time to show only restaurants open at that moment
+  (late-night hours count on the day they run into: Friday 18:00–02:00 is open Saturday at 01:00)
 
 **Table → Map**
 1. Click a row in the table to select that restaurant
@@ -80,13 +82,6 @@ def load_hours() -> pd.DataFrame:
     client = get_bigquery_client()
     query = f"SELECT * FROM `{GCP_PROJECT_ID}.{BQ_DATASET_MART}.fct_restaurant_hours`"
     return client.query(query).to_dataframe()
-
-
-def _is_open_at(row: pd.Series, at_time: datetime.time) -> bool:
-    """Check whether a single fct_restaurant_hours row covers at_time, handling overnight wraparound."""
-    if row["is_overnight"]:
-        return at_time >= row["start_time"] or at_time <= row["end_time"]
-    return row["start_time"] <= at_time <= row["end_time"]
 
 
 def _build_map(filtered: pd.DataFrame, focus_row: pd.Series | None) -> folium.Map:
@@ -178,7 +173,17 @@ def render_map(filtered: pd.DataFrame, df: pd.DataFrame) -> None:
         zoom, center = 17, (focus_row["latitude"], focus_row["longitude"])
     else:
         zoom, center = DEFAULT_MAP_ZOOM, tuple(DEFAULT_MAP_CENTER)
-    st_folium(m, width=1300, height=600, key="main_map", zoom=zoom, center=center)
+    # returned_objects=[]: the app never reads map state back, so panning or zooming
+    # should not rerun the script. use_container_width: fit any screen, not a fixed 1300 px.
+    st_folium(
+        m,
+        height=600,
+        use_container_width=True,
+        returned_objects=[],
+        key="main_map",
+        zoom=zoom,
+        center=center,
+    )
 
 
 df = load_dim_restaurants()
@@ -220,15 +225,18 @@ if selected_transactions:
         )
     ]
 if filter_by_hours and selected_day is not None and selected_time is not None:
-    hours_df = load_hours()
-    day_hours = hours_df[hours_df["day_of_week"] == DAY_NAMES.index(selected_day)]
-    open_mask = day_hours.apply(_is_open_at, axis=1, at_time=selected_time)
-    open_ids = set(day_hours.loc[open_mask, "restaurant_id"])
+    open_ids = open_restaurant_ids(load_hours(), DAY_NAMES.index(selected_day), selected_time)
     filtered = filtered[filtered["id"].isin(open_ids)]
 
 title_col, help_col = st.columns([5, 1])
 with title_col:
     st.title("🍽️ LA Smart Dining Radar")
+    as_of = pd.to_datetime(df["ingestion_timestamp"]).max() if "ingestion_timestamp" in df else None
+    as_of_text = f"Data as of {as_of:%Y-%m-%d}" if as_of is not None and pd.notna(as_of) else "Data date unknown"
+    st.caption(
+        f"{as_of_text} · Business data from [Yelp](https://www.yelp.com) via the Yelp Fusion API. "
+        "Ratings, review counts, addresses and hours are Yelp content."
+    )
 with help_col:
     with st.popover("❓ Help"):
         st.markdown(HELP_TEXT)
