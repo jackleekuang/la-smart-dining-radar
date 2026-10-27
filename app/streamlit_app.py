@@ -5,13 +5,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import datetime
 import os
 
 import folium
 import pandas as pd
 import streamlit as st
-from folium.plugins import MarkerCluster
+from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 
 # On Streamlit Community Cloud, config only arrives via st.secrets (pasted in
@@ -25,6 +24,8 @@ from src.app_helpers import (
     average_rating_label,
     default_open_filter,
     format_rating,
+    map_points,
+    open_restaurant_ids,
     restaurant_count_label,
 )
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
@@ -52,6 +53,15 @@ TABLE_COLUMNS = [
 DISPLAY_COLUMNS = [c for c in TABLE_COLUMNS if c != "id"]
 DEFAULT_MAP_CENTER = [34.06, -118.28]
 DEFAULT_MAP_ZOOM = 11
+# Leaflet JS run per point by FastMarkerCluster; row = [lat, lng, popup_html, tooltip]
+MARKER_CALLBACK = """
+function (row) {
+    var marker = L.marker(new L.LatLng(row[0], row[1]));
+    marker.bindPopup(row[2], {maxWidth: 250});
+    marker.bindTooltip(row[3]);
+    return marker;
+}
+"""
 
 HELP_TEXT = """
 **Filters (left sidebar)**
@@ -88,13 +98,6 @@ def load_hours() -> pd.DataFrame:
     return client.query(query).to_dataframe()
 
 
-def _is_open_at(row: pd.Series, at_time: datetime.time) -> bool:
-    """Check whether a single fct_restaurant_hours row covers at_time, handling overnight wraparound."""
-    if row["is_overnight"]:
-        return at_time >= row["start_time"] or at_time <= row["end_time"]
-    return row["start_time"] <= at_time <= row["end_time"]
-
-
 def _build_map(filtered: pd.DataFrame, focus_row: pd.Series | None) -> folium.Map:
     """Construct the Folium map for the current filtered restaurant set (expensive; caller should cache)."""
     if focus_row is not None:
@@ -108,21 +111,10 @@ def _build_map(filtered: pd.DataFrame, focus_row: pd.Series | None) -> folium.Ma
     else:
         m = folium.Map(location=DEFAULT_MAP_CENTER, zoom_start=DEFAULT_MAP_ZOOM)
 
-    cluster = MarkerCluster().add_to(m)
-    for _, row in filtered.iterrows():
-        if pd.isna(row["latitude"]) or pd.isna(row["longitude"]):
-            continue
-        popup_html = (
-            f"<b>{row['name']}</b><br>"
-            f"{format_rating(row['rating'])} ({row['review_count']} reviews)<br>"
-            f"{row['price']}<br>"
-            f"{row['address1']}, {row['city']}"
-        )
-        folium.Marker(
-            location=[row["latitude"], row["longitude"]],
-            popup=folium.Popup(popup_html, max_width=250),
-            tooltip=row["name"],
-        ).add_to(cluster)
+    # FastMarkerCluster ships the points as one JSON array and creates markers
+    # client-side, instead of serializing thousands of individual folium.Marker
+    # objects into the page on every rerun (the main cost of the old map).
+    FastMarkerCluster(map_points(filtered), callback=MARKER_CALLBACK).add_to(m)
     return m
 
 
@@ -225,10 +217,7 @@ if selected_transactions:
         )
     ]
 if filter_by_hours and selected_day is not None and selected_time is not None:
-    hours_df = load_hours()
-    day_hours = hours_df[hours_df["day_of_week"] == DAY_NAMES.index(selected_day)]
-    open_mask = day_hours.apply(_is_open_at, axis=1, at_time=selected_time)
-    open_ids = set(day_hours.loc[open_mask, "restaurant_id"])
+    open_ids = open_restaurant_ids(load_hours(), DAY_NAMES.index(selected_day), selected_time)
     filtered = filtered[filtered["id"].isin(open_ids)]
 
 title_col, help_col = st.columns([5, 1])
