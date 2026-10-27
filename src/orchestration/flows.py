@@ -5,10 +5,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from prefect import flow, task
+from prefect import flow, get_run_logger, task
 
 from src.extract.yelp_api import fetch_all_restaurants
 from src.load.bigquery_loader import load_restaurants
+from src.orchestration.soda_exit import SodaOutcome, interpret_soda_exit_code
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 VENV_BIN = Path(sys.executable).parent
@@ -28,8 +29,12 @@ def load_task(businesses: list[dict[str, Any]]) -> None:
 
 @task
 def soda_scan_task() -> None:
-    """Run Soda Core data quality checks against the raw layer."""
-    subprocess.run(
+    """Run Soda Core data quality checks against the raw layer.
+
+    Warn-level checks (e.g. a few out-of-area records, slightly stale data) are
+    logged and the run continues; fail-level checks or scan errors stop it.
+    """
+    result = subprocess.run(
         [
             str(VENV_BIN / "soda"),
             "scan",
@@ -38,8 +43,13 @@ def soda_scan_task() -> None:
             "soda/checks/raw_yelp_restaurants.yml",
         ],
         cwd=PROJECT_ROOT,
-        check=True,
+        check=False,
     )
+    outcome = interpret_soda_exit_code(result.returncode)
+    if outcome is SodaOutcome.WARNED:
+        get_run_logger().warning("Soda raw-layer scan passed with warnings; see scan output above.")
+    elif outcome is SodaOutcome.FAILED:
+        raise RuntimeError(f"Soda raw-layer scan failed (exit code {result.returncode}).")
 
 
 @task
