@@ -30,7 +30,9 @@ BigQuery  raw.raw_yelp_restaurants        append-only landing table
 dbt
    staging      stg_yelp_restaurants            (view)  dedup by latest ingestion, clean free-text city
    intermediate int_restaurants_city_mapped     (view)  map city aliases via seed
+   intermediate int_restaurants_service_area    (view)  tag rows in/out of the LA County service area
    marts        dim_restaurants                 (table) business-ready dim + popularity_score
+                dq_restaurants_quarantine       (table) records withheld from the dim + reason
                 fct_restaurant_hours            (table) one row per restaurant per open period
    │  dbt test   quality gate on the MART layer
    ▼
