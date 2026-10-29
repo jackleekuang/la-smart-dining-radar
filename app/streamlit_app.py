@@ -16,9 +16,14 @@ from streamlit_folium import st_folium
 
 # On Streamlit Community Cloud, config only arrives via st.secrets (pasted in
 # the app dashboard), not a .env file. Mirror it into the environment before
-# importing src.config, which reads plain env vars via os.getenv().
-for _key, _value in st.secrets.items():
-    os.environ.setdefault(_key, str(_value))
+# importing src.config, which reads plain env vars via os.getenv(). Local dev
+# has no secrets.toml at all, which makes st.secrets raise rather than report
+# empty, so treat that as "nothing to mirror" instead of crashing.
+try:
+    for _key, _value in st.secrets.items():
+        os.environ.setdefault(_key, str(_value))
+except st.errors.StreamlitSecretNotFoundError:
+    pass
 
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
 from src.load.bigquery_loader import get_bigquery_client
