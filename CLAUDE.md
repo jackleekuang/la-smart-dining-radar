@@ -1,6 +1,7 @@
 # CLAUDE.md — LA Smart Dining Radar
 
 Development context for continuing this project. Read this first when resuming work.
+For current status, open PRs and the ordered next steps, read `docs/HANDOFF.md` next.
 
 ## What this is
 
@@ -125,9 +126,7 @@ steps are manual. Documenting/scripting them is a good next task.
 
 ## Known issues & next steps
 
-1. **Remove the DEBUG caption in `app/streamlit_app.py` (lines ~28–32).** It prints the
-   list of secret key-names and `GCP_PROJECT_ID`/dataset to every visitor of the public
-   dashboard. Leftover from diagnosing a Streamlit Cloud `NotFound`. Delete it.
+1. ~~Remove the DEBUG caption in `app/streamlit_app.py`~~ — done in PR #1.
 2. **Raw load is append-only streaming insert.** Every quarterly run re-appends all
    fetched rows; the raw table grows unbounded, streaming-buffered rows can't be deleted
    for ~90 min, and one `insert_rows_json` call sends all rows in a single request (risk
