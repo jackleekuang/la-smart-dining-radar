@@ -9,8 +9,8 @@ from src.v2 import socrata
 class BuildParamsTests(unittest.TestCase):
     def test_full_load_has_no_watermark_clause(self):
         params = socrata.build_params("naics", "722", None, 100, 0)
-        self.assertEqual(params["$where"], "naics like '722%'")
-        self.assertEqual(params["$select"], ":id, :updated_at, *")
+        self.assertEqual(params["$where"], "naics >= 722000 AND naics < 723000")
+        self.assertEqual(params["$select"], "*, :id, :updated_at")
         self.assertEqual(params["$order"], ":id")
 
     def test_incremental_strips_timezone_suffix(self):

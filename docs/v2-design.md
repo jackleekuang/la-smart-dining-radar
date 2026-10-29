@@ -81,9 +81,63 @@ Orchestration: Prefect 3 flow `dineradar-v2-landscape`, monthly (`serve`, cron 0
 |---|---|
 | Overture BigQuery field paths (`taxonomy.primary` / `basic_category` / `categories.primary`, `addresses.list[0].element.*`) | Run `dbt build -s stg_overture__places`, then check null rates of `primary_category` and `postcode` |
 | The release version appears in the table labels | `detect_release` falls back to the table's last-modified date |
-| LA City field names (`location_account`, `naics`, `location_1`, …) | The Soda check `payload_missing_account_pct` and `not_null` on `location_account` |
+| LA City field names (`location_account`, `naics`, `location`, …) | The Soda check `payload_missing_account_pct` and `not_null` on `location_account` |
 | Soda resolves unqualified table names in user-defined metric SQL to the configured dataset | First `soda scan` |
 | Matching thresholds (150 m, score ≥ 0.6) | Hand-review 30 matches per confidence tier; the singular test warns if the match rate is < 20% |
+
+## First run results (2026-10-29)
+
+Three assumptions were wrong, all found by actually running against live data (not caught by
+`dbt parse`/unit tests, which don't touch the network or BigQuery):
+
+1. **LA City `naics` is a Socrata `number`, not text.** The extractor built `naics like '722%'`,
+   which Socrata rejects outright (400) against a numeric column. Fixed by matching a numeric
+   range instead (`naics >= 722000 AND naics < 723000` — codes are fixed-width 6 digits):
+   `src/v2/socrata.py`, with `tests/test_v2_socrata.py` updated to match.
+2. **Socrata SoQL requires `*` first in `$select`.** `":id, :updated_at, *"` is a syntax error
+   ("Star selections must come at the start of the select-list"); reordered to `"*, :id, :updated_at"`
+   in the same file.
+3. **Coordinates are at `location.latitude`/`location.longitude`, not `location_1.*`.** Confirmed
+   against the live Socrata payload. Fixed in `stg_la_city__businesses.sql` and the matching
+   assumption check in `scripts/v2_diagnose.py`. Before the fix, 0/24,995 LA City rows had
+   coordinates, so the entity-match step could not match anything; after the fix, 21,263/24,995
+   (85%) do — the rest appear to be genuinely un-geocoded source rows (payload has no `location`
+   key at all), not a parsing bug.
+
+One more thing the fix didn't automatically resolve: `snap_la_city__businesses` (the dbt
+snapshot that gives LA City data SCD2 history) had already been created on the first *successful*
+dbt build, while the coordinate bug was still live — so it locked in all-NULL `lat`/`lon` for
+every row. dbt snapshots only add a new version when `source_updated_at` changes, so re-running
+`dbt build` after the code fix did not refresh the bad data already in the snapshot. Since this
+was the first snapshot ever built (`past_versions: 0`, nothing of value to lose), Jack approved
+dropping `la-smart-dining-radar.snapshots.snap_la_city__businesses` and letting dbt rebuild it
+clean on the next run.
+
+**Numbers, after all three fixes and the snapshot rebuild:**
+
+- Overture: 37,994 places loaded for release `2026-10-21`, 33,821 of them food places
+  (one-time load scanned ~53.7 GiB of the public table — well under the 200 GiB cap; the
+  release is cached after first load, so re-running `v2_first_run.sh` doesn't re-scan it).
+- LA City: 24,995 current business-license locations with NAICS 722 (restaurants), 362 already
+  closed (`location_end_date` set), 21,263 (85%) with usable coordinates.
+- Entity match rate: 6,279 / 33,821 Overture places matched to a city license (18.6% — high
+  confidence 4,043, medium 1,216, low 1,020). This is just under the 20% dbt-warn threshold.
+  Hand-reviewing the low-confidence sample (e.g. "MOD Pizza" vs. legal name "MOD SUPERFAST PIZZA
+  (CALIFORNIA) LLC", distance 67 m) shows real restaurants with a chain/common name that differs
+  more from the registered legal or DBA name than `normalize_name` can close — not a
+  normalization bug. Per the sprint rules, the 150 m / 0.6 thresholds were left untouched;
+  this is flagged here for Jack to decide whether 18.6% is acceptable or the thresholds should
+  be revisited (most non-matches are simply Overture places with no corresponding city license
+  in this NAICS-722 extract, which is expected — a lot of LA restaurants are unlicensed or
+  licensed under a different NAICS code such as a shared commercial-kitchen catch-all).
+- `unified_status` on `dim_restaurant_v2` (33,821 rows): `open_unverified` 25,660,
+  `open_confirmed` 5,888, `closed_unverified` 2,177, `conflict` 87, `closed_confirmed` 9.
+- `dbt build --select tag:v2`: 36 pass, 1 warn (`assert_match_rate_reasonable`, expected given
+  the 18.6% match rate above), 0 errors. Soda scan on the raw layer: 12/12 checks passed.
+- Churn: only one Overture release has been loaded so far, so `mart_zip_release_churn` shows
+  33,374 active places and 0 openings/closures/status changes for this release — expected;
+  openings/closures need at least two months of snapshots to say anything (see the note at the
+  bottom of `INTERVIEW_SPRINT.md`).
 
 ## Run book
 
@@ -110,7 +164,7 @@ python -m pytest -q tests/test_v2_*.py
 
 ## Next steps
 
-- [ ] First real run; resolve the assumptions above
+- [x] First real run; resolve the assumptions above — see "First run results (2026-10-29)"
 - [ ] Streamlit page: unified status map, conflict list, churn per ZIP
 - [ ] DataHub: ingest BigQuery + dbt (`manifest.json`, `catalog.json`, `run_results.json`), and
       Prefect lineage via `prefect-datahub`

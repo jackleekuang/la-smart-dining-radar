@@ -38,11 +38,20 @@ def build_params(
     if not naics_prefix.isdigit():
         raise ValueError(f"NAICS prefix must be digits: {naics_prefix!r}")
 
-    where = f"{naics_field} like '{naics_prefix}%'"
+    # LA City's `naics` column is a SODA number, not text, so a `like '722%'` comparison
+    # is a type mismatch (400 Bad Request). Codes are fixed-width 6 digits, so match the
+    # prefix with a numeric range instead.
+    width = 6 - len(naics_prefix)
+    if width < 0:
+        raise ValueError(f"NAICS prefix longer than 6 digits: {naics_prefix!r}")
+    low = int(naics_prefix) * 10**width
+    high = low + 10**width
+    where = f"{naics_field} >= {low} AND {naics_field} < {high}"
     if watermark:
         where += f" AND :updated_at > '{_soql_timestamp(watermark)}'"
     return {
-        "$select": ":id, :updated_at, *",
+        # Socrata SoQL requires star selections at the start of the select-list.
+        "$select": "*, :id, :updated_at",
         "$where": where,
         "$order": ":id",
         "$limit": str(limit),

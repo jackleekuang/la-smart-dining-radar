@@ -17,14 +17,8 @@ parsed as (
         json_value(payload, '$.primary_naics_description') as naics_description,
         safe_cast(left(json_value(payload, '$.location_start_date'), 10) as date) as location_start_date,
         safe_cast(left(json_value(payload, '$.location_end_date'), 10) as date) as location_end_date,
-        coalesce(
-            safe_cast(json_value(payload, '$.location_1.latitude') as float64),
-            safe_cast(json_value(payload, '$.location_1.coordinates[1]') as float64)
-        ) as lat,
-        coalesce(
-            safe_cast(json_value(payload, '$.location_1.longitude') as float64),
-            safe_cast(json_value(payload, '$.location_1.coordinates[0]') as float64)
-        ) as lon,
+        safe_cast(json_value(payload, '$.location.latitude') as float64) as lat,
+        safe_cast(json_value(payload, '$.location.longitude') as float64) as lon,
         source_updated_at,
         _loaded_at,
         row_number() over (

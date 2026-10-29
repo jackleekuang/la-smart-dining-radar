@@ -48,7 +48,7 @@ CHECKS: list[tuple[str, str, str]] = [
                 round(100 * countif(json_value(payload, '$.business_name') is null) / count(*), 1) as pct_null_business_name,
                 round(100 * countif(json_value(payload, '$.naics') is null) / count(*), 1) as pct_null_naics,
                 round(100 * countif(json_value(payload, '$.zip_code') is null) / count(*), 1) as pct_null_zip_code,
-                round(100 * countif(json_query(payload, '$.location_1') is null) / count(*), 1) as pct_null_location_1
+                round(100 * countif(json_query(payload, '$.location') is null) / count(*), 1) as pct_null_location
          from {t(RAW, 'raw_la_city_businesses')}"""),
     ("LA City payload keys actually present",
      "If an assumed key above is mostly null, the real name is in this list",
