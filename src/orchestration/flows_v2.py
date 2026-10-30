@@ -21,6 +21,7 @@ import requests
 from google.cloud import bigquery
 from prefect import flow, get_run_logger, task
 
+from src.observability.run_log import record_dbt_results, record_soda_results, track_step
 from src.v2 import bq, settings, socrata
 from src.v2.overture_sql import (
     build_release_count_sql,
@@ -32,11 +33,20 @@ from src.v2.overture_sql import (
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DBT_DIR = PROJECT_ROOT / "dbt_project"
 SODA_DIR = PROJECT_ROOT / "soda"
+FLOW_NAME = "dineradar-v2-landscape"
 
 
 @task(retries=2, retry_delay_seconds=30)
 def snapshot_overture(force: bool = False) -> dict:
     """Copy the current Overture release (LA, food-related) into raw, once per release."""
+    with track_step(FLOW_NAME, "snapshot_overture") as step:
+        result = _snapshot_overture(force)
+        step.rows_processed = result["rows"]
+        step.detail = f"release {result['release']}" + (" (already loaded, skipped)" if result["skipped"] else "")
+    return result
+
+
+def _snapshot_overture(force: bool) -> dict:
     logger = get_run_logger()
     client = bq.get_bigquery_client()
     bq.ensure_raw_tables(client)
@@ -76,6 +86,12 @@ def _fetch_page(url: str, params: dict[str, str], headers: dict[str, str]) -> li
 @task(retries=3, retry_delay_seconds=[10, 60, 180])
 def extract_load_la_city(full_refresh: bool = False) -> int:
     """Pull LA City food-service businesses changed since the last load, append to raw."""
+    with track_step(FLOW_NAME, "extract_load_la_city") as step:
+        step.rows_processed = _extract_load_la_city(full_refresh)
+    return step.rows_processed
+
+
+def _extract_load_la_city(full_refresh: bool) -> int:
     logger = get_run_logger()
     bq.ensure_raw_tables()
     watermark = None if full_refresh else bq.max_timestamp(settings.RAW_LA_CITY_TABLE, "source_updated_at")
@@ -108,9 +124,13 @@ def soda_gate(checks_files: list[str]) -> None:
     scan.add_configuration_yaml_file(str(SODA_DIR / "configuration.yml"))
     for name in checks_files:
         scan.add_sodacl_yaml_file(str(SODA_DIR / "checks" / name))
-    scan.execute()
-    get_run_logger().info(scan.get_logs_text())
-    scan.assert_no_checks_fail()
+    with track_step(FLOW_NAME, "soda_gate") as step:
+        scan.execute()
+        get_run_logger().info(scan.get_logs_text())
+        step.detail = record_soda_results(FLOW_NAME, scan.get_scan_results())
+        if getattr(scan, "has_check_warns", lambda: False)() and not scan.has_check_fails():
+            step.status = "warned"
+        scan.assert_no_checks_fail()
 
 
 @task
@@ -118,11 +138,15 @@ def dbt_build(select: str = "tag:v2") -> None:
     """Seeds, snapshots, models and tests for the v2 DAG, in dependency order."""
     from dbt.cli.main import dbtRunner
 
-    result = dbtRunner().invoke(
-        ["build", "--select", select, "--project-dir", str(DBT_DIR), "--profiles-dir", str(DBT_DIR)]
-    )
-    if not result.success:
-        raise RuntimeError(f"dbt build failed for selector {select!r}")
+    with track_step(FLOW_NAME, "dbt_build") as step:
+        result = dbtRunner().invoke(
+            ["build", "--select", select, "--project-dir", str(DBT_DIR), "--profiles-dir", str(DBT_DIR)]
+        )
+        step.detail = record_dbt_results(FLOW_NAME, DBT_DIR / "target" / "run_results.json")
+        if not result.success:
+            raise RuntimeError(f"dbt build failed for selector {select!r}: {step.detail}")
+        if " warn" in step.detail:
+            step.status = "warned"
 
 
 @flow(name="dineradar-v2-landscape")
