@@ -20,8 +20,9 @@ pull:
       branch: main
   - prefect.deployments.steps.set_working_directory:
       directory: "{{ clone.directory }}"
+  # Runs in the working directory set above; clone.directory is relative, so passing it
+  # again here would look for <clone>/<clone> and fail.
   - prefect.deployments.steps.pip_install_requirements:
-      directory: "{{ clone.directory }}"
       requirements_file: requirements-pipeline.txt
 
 deployments:
