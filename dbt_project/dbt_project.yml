@@ -1,14 +1,19 @@
 name: 'la_smart_dining_radar'
-version: '1.0.0'
+version: '2.0.0'
 config-version: 2
 profile: 'la_smart_dining_radar'
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
 test-paths: ["tests"]
 clean-targets: ["target", "dbt_packages"]
 
 vars:
+  # Entity-matching thresholds (v2). Kept as vars so they are visible and tunable in one place.
+  match_max_distance_m: 150
+  match_min_score: 0.6
   # Service area = Los Angeles County. A restaurant is published only if its
   # coordinates fall inside this bounding box AND its state/ZIP agree (see
   # int_restaurants_service_area). Soda's raw-layer check uses the same box --
@@ -25,12 +30,26 @@ vars:
 
 models:
   la_smart_dining_radar:
+    # v1: Yelp-based dashboard (unchanged)
     staging:
       +materialized: view
     intermediate:
       +materialized: view
     marts:
       +materialized: table
+    # v2: open-data landscape monitor
+    v2:
+      +tags: ['v2']
+      staging:
+        +materialized: view
+      intermediate:
+        +materialized: table
+      marts:
+        +materialized: table
+
+snapshots:
+  la_smart_dining_radar:
+    +tags: ['v2']
 
 seeds:
   la_smart_dining_radar:

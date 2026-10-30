@@ -1,0 +1,121 @@
+version: 2
+
+models:
+  - name: stg_overture__places
+    description: One row per food place per Overture release, parsed from the JSON payload.
+    columns:
+      - name: place_release_key
+        tests: [unique, not_null]
+      - name: place_id
+        tests: [not_null]
+      - name: operating_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['open', 'temporarily_closed', 'permanently_closed']
+              config:
+                severity: warn
+
+  - name: stg_la_city__businesses
+    description: Latest record per LA City business location (NAICS 722).
+    columns:
+      - name: location_account
+        tests: [unique, not_null]
+
+  - name: int_overture__place_history
+    description: Lifecycle per place across all loaded releases plus latest attributes.
+    columns:
+      - name: place_id
+        tests: [unique, not_null]
+
+  - name: int_overture__place_events
+    description: Release-over-release change events per place.
+    columns:
+      - name: event_key
+        tests: [unique, not_null]
+      - name: event_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['appeared', 'reappeared', 'disappeared', 'status_changed', 'category_changed']
+
+  - name: int_entity__overture_la_city_match
+    description: One-to-one links between Overture places and LA City business locations.
+    columns:
+      - name: place_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('int_overture__place_history')
+                field: place_id
+      - name: location_account
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_la_city__businesses')
+                field: location_account
+      - name: match_score
+        tests: [not_null]
+
+  - name: dim_restaurant_v2
+    description: Unified restaurant dimension reconciling Overture and the LA City registry.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: place_id
+        data_type: string
+        constraints:
+          - type: not_null
+        tests: [unique, not_null]
+      - name: place_name
+        data_type: string
+      - name: primary_category
+        data_type: string
+      - name: street_address
+        data_type: string
+      - name: postcode
+        data_type: string
+      - name: lat
+        data_type: float64
+      - name: lon
+        data_type: float64
+      - name: first_seen_date
+        data_type: date
+      - name: last_seen_date
+        data_type: date
+      - name: is_present_latest
+        data_type: bool
+      - name: last_operating_status
+        data_type: string
+      - name: la_city_location_account
+        data_type: string
+      - name: match_score
+        data_type: float64
+      - name: match_confidence
+        data_type: string
+      - name: la_city_naics
+        data_type: string
+      - name: license_start_date
+        data_type: date
+      - name: license_end_date
+        data_type: date
+      - name: unified_status
+        data_type: string
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['open_confirmed', 'open_unverified', 'conflict', 'temporarily_closed', 'closed_confirmed', 'closed_unverified']
+
+  - name: mart_zip_release_churn
+    description: Openings, closures and net change per ZIP per Overture release.
+    columns:
+      - name: zip_release_key
+        tests: [unique, not_null]
+      - name: active_places
+        tests: [not_null]

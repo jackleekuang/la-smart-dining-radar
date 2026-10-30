@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, v2-open-data]
 
 jobs:
   test:
@@ -19,11 +19,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Unit tests
-        run: python -m pytest -q
+      - name: Check Python syntax
+        run: python -m compileall -q src app scripts
 
-      # Parses every model, seed and test (incl. Jinja/vars/refs) without a
-      # warehouse connection, so a broken ref or YAML typo fails the PR.
+      # Everything under tests/ mocks its API/BigQuery calls, so no network or
+      # GCP credentials are needed and nothing is skipped.
+      - name: Unit tests
+        run: python -m pytest -q tests
+
+      # Parses every model, seed, snapshot and test (v1 and v2, incl. Jinja/vars/refs)
+      # without a warehouse connection, so a broken ref or YAML typo fails the PR.
       - name: dbt parse
         env:
           GCP_PROJECT_ID: ci-placeholder

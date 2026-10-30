@@ -17,3 +17,6 @@ dbt_project/.user.yml
 
 .DS_Store
 .pytest_cache/
+
+# run logs (scripts/v2_first_run.sh)
+run_logs/

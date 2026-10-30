@@ -8,7 +8,7 @@ db-dtypes>=1.2.0
 pandas>=2.2.0
 
 # --- Orchestration ---
-prefect>=2.19.0
+prefect>=3.0,<4  # v2 flow uses Prefect 3 serve(); v1 flow is compatible
 
 # --- Transformation ---
 dbt-core>=1.8.0
