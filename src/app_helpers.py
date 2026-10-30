@@ -43,3 +43,25 @@ def default_open_filter(now: datetime.datetime | None = None) -> tuple[int, date
     """
     current = (now or datetime.datetime.now(LA_TZ)).astimezone(LA_TZ)
     return current.weekday(), current.time().replace(second=0, microsecond=0)
+
+
+def table_key(ids: pd.Series, prefix: str = "restaurant_table") -> str:
+    """Widget key that changes whenever the set of rows in the table changes.
+
+    st.dataframe keeps its row selection under its key across reruns. With a fixed
+    key, selecting row 1,500 and then filtering down to 20 rows left a stale
+    selection pointing past the end of the table (IndexError). Keying on the rows
+    shown resets the selection whenever a filter changes the table.
+    """
+    import hashlib
+
+    digest = hashlib.md5("|".join(ids.astype(str)).encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}_{digest}"
+
+
+def valid_selection(rows: list[int] | None, n_rows: int) -> int | None:
+    """First selected row position if it still exists in a table of n_rows, else None."""
+    for r in rows or []:
+        if 0 <= r < n_rows:
+            return r
+    return None
