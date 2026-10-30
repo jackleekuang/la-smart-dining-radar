@@ -101,5 +101,7 @@ def max_timestamp(table_name: str, column: str) -> str | None:
     if value is None:
         return None
     if isinstance(value, dt.datetime):
-        return value.replace(tzinfo=None).isoformat(timespec="seconds")
+        # Keep milliseconds: Socrata stamps :updated_at to the millisecond and bulk updates
+        # share one second, so a seconds-only watermark re-matched those rows on every run.
+        return value.replace(tzinfo=None).isoformat(timespec="milliseconds")
     return str(value)
