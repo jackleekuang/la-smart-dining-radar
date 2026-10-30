@@ -40,3 +40,20 @@ def test_default_open_filter_uses_la_local_time() -> None:
     day, time = default_open_filter(utc)
     assert day == 1  # Tuesday
     assert time == datetime.time(20, 15)
+
+
+def test_table_key_changes_with_rows_and_is_stable() -> None:
+    from src.app_helpers import table_key
+
+    all_rows = pd.Series(["a", "b", "c"])
+    assert table_key(all_rows) == table_key(pd.Series(["a", "b", "c"]))
+    assert table_key(all_rows) != table_key(pd.Series(["a"]))
+
+
+def test_valid_selection_drops_rows_past_the_end() -> None:
+    from src.app_helpers import valid_selection
+
+    assert valid_selection([1500], 20) is None  # stale selection after filtering
+    assert valid_selection([3], 20) == 3
+    assert valid_selection([], 20) is None
+    assert valid_selection(None, 20) is None
