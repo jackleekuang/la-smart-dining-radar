@@ -76,7 +76,12 @@ def _search(
         if response.status_code == 429 and attempt < MAX_RETRIES - 1:
             time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
             continue
-        response.raise_for_status()
+        if not response.ok:
+            # Keep Yelp's error body: without it a failed run only says "400 Bad Request".
+            raise requests.exceptions.HTTPError(
+                f"Yelp returned HTTP {response.status_code}: {response.text[:300]}",
+                response=response,
+            )
         return response.json().get("businesses", [])
 
     return []  # unreachable: last attempt either returns or raises via raise_for_status
@@ -111,11 +116,14 @@ def fetch_cell(
             page = _search(latitude, longitude, radius, term=term, offset=offset)
         except requests.exceptions.HTTPError as exc:
             time.sleep(REQUEST_DELAY_SECONDS)
-            if exc.response is not None and exc.response.status_code == 400:
+            if exc.response is not None and exc.response.status_code == 400 and offset > 0:
                 # Yelp caps offset + limit per account tier; remember the last
                 # offset that actually worked so later cells skip the probe.
                 discovered_cap = offset - PAGE_SIZE
                 break
+            # A 400 on the first page is not an offset cap: the request itself was
+            # rejected. Treating it as a cap (cap = -50) silently skipped every
+            # remaining cell and produced an empty run on 2026-10-01.
             raise
         # Pace every call uniformly (not just successful ones) so back-to-back
         # cells never fire requests with zero gap between them.
@@ -181,6 +189,11 @@ def fetch_all_restaurants(term: str = "restaurants") -> list[dict[str, Any]]:
         all_results.extend(results)
         if discovered_cap is not None:
             known_max_offset = min(known_max_offset, discovered_cap)
+    if not all_results:
+        raise RuntimeError(
+            f"Yelp returned 0 listings across {len(query_points)} query points; "
+            "refusing to continue with an empty batch."
+        )
     return all_results
 
 

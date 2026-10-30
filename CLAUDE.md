@@ -162,6 +162,29 @@ steps are manual. Documenting/scripting them is a good next task.
   2/3 still do (`src/orchestration/soda_exit.py`).
 - Keep the bounding box in `dbt_project.yml` and `soda/checks/...yml` in sync.
 
+## Run log & observability (added 2026-10-30)
+
+- Both flows write to two append-only tables in the mart dataset (`src/observability/`):
+  `pipeline_runs` (one row per step attempt: status success/warned/failed, rows, duration,
+  error, Prefect link) and `dq_check_results` (one row per Soda check and dbt test:
+  pass/warn/fail/not_evaluated + observed value / failing-row count). Tables are created on
+  first write. Writes are best-effort and never fail the pipeline.
+- Soda and dbt results are stored **before** the gate decides to stop, so a stopped run still
+  shows which check stopped it. Dashboard page: `app/pages/3_Pipeline_Health.py`.
+- Prefect Cloud is connected in Cloud Run (logs print a `View at https://app.prefect.cloud/...`
+  link per run). Failure alerts are a Prefect Cloud Automation, configured in the UI, not code.
+- Schedule lives in **Cloud Scheduler**, not Prefect: job `dining-radar-quarterly-trigger`,
+  `0 6 1 1,4,7,10 *` America/Los_Angeles, target Cloud Run job `dining-radar-pipeline-job`
+  (us-west2). Scheduler "Success" only means the job was triggered — check the job execution.
+  v2 has no schedule yet.
+- **Incident 2026-10-01:** the scheduled run failed (two attempts). Yelp answered the first request with
+  HTTP 400; `fetch_cell` treated any 400 as the offset cap (cap = -50), skipped every other
+  query point and returned 0 rows, so `load` failed with "No rows present in the request".
+  Fixed: a 400 on the first page now raises with Yelp's error body, and an empty extract
+  fails. The cause of the 400 itself is still unknown (body was discarded at the time).
+- Unverified: the Soda data source uses `account_info_json_path: ${GCP_CREDENTIALS_PATH}`,
+  which is empty in Cloud Run (ADC). Not yet confirmed that Soda authenticates inside Cloud Run; check the next run's soda_scan row.
+
 ## Conventions
 
 - All Python has type hints + concise docstrings; secrets only via env (never hardcoded).
