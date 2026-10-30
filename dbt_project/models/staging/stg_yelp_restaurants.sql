@@ -38,7 +38,10 @@ cleaned as (
 select
     id,
     name,
-    rating,
+    -- Yelp ratings run 1.0-5.0; the API returns 0 for a business with no
+    -- reviews yet. Treat that as "not rated" (NULL) so it can't drag down
+    -- averages or rankings -- 0 is a vendor sentinel, not a real score.
+    nullif(rating, 0) as rating,
     review_count,
     price,
     categories,

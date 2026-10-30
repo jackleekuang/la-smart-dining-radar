@@ -1,11 +1,12 @@
 with staged as (
-    select * from {{ ref('int_restaurants_city_mapped') }}
+    select * from {{ ref('int_restaurants_service_area') }}
 )
 
 select
     id,
     name,
     rating,
+    rating is not null as is_rated,
     review_count,
     coalesce(price, 'Unknown') as price,
     categories,
@@ -15,6 +16,7 @@ select
     ) AS category_titles,
     latitude,
     longitude,
+    -- NULL for unrated restaurants (rating is NULL), so they sort last
     round(rating * ln(review_count + 1), 3) as popularity_score,
     is_closed,
     address1,
@@ -30,3 +32,4 @@ select
     ingestion_timestamp
 from staged
 where is_closed = false
+  and is_in_service_area

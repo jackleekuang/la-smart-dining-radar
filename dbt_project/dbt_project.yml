@@ -14,6 +14,19 @@ vars:
   # Entity-matching thresholds (v2). Kept as vars so they are visible and tunable in one place.
   match_max_distance_m: 150
   match_min_score: 0.6
+  # Service area = Los Angeles County. A restaurant is published only if its
+  # coordinates fall inside this bounding box AND its state/ZIP agree (see
+  # int_restaurants_service_area). Soda's raw-layer check uses the same box --
+  # keep soda/checks/raw_yelp_restaurants.yml in sync if you change it.
+  service_area:
+    min_lat: 33.70
+    max_lat: 34.82
+    min_lng: -118.95
+    max_lng: -117.65
+  # Anomaly gate: if more than this share of open restaurants fails the
+  # service-area contract, something upstream changed (extractor bug or vendor
+  # behaviour) and the run should stop instead of publishing.
+  max_quarantine_share: 0.02
 
 models:
   la_smart_dining_radar:
@@ -37,3 +50,9 @@ models:
 snapshots:
   la_smart_dining_radar:
     +tags: ['v2']
+
+seeds:
+  la_smart_dining_radar:
+    service_area_zip3:
+      +column_types:
+        zip3: string

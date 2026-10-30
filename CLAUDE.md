@@ -23,7 +23,9 @@ BigQuery  raw.raw_yelp_restaurants        (append-only streaming insert; src/loa
 dbt  (dbt_project/)
    staging.stg_yelp_restaurants      view   dedup by id (latest ingestion), clean free-text city
    intermediate.int_restaurants_city_mapped  view   apply city_alias_map seed
-   marts.dim_restaurants             table  business-ready dim + popularity_score, is_closed=false
+   intermediate.int_restaurants_service_area view   tag each row in/out of LA County service area + reason
+   marts.dim_restaurants             table  business-ready dim + popularity_score, open + in service area only
+   marts.dq_restaurants_quarantine   table  rows withheld from the dim (vendor address/coordinate errors) + reason
    marts.fct_restaurant_hours        table  one row per restaurant per open period (overnight-aware)
    │  dbt test  (quality gate on MART layer — not_null/unique/accepted_values/relationships)
    ▼
@@ -134,8 +136,31 @@ steps are manual. Documenting/scripting them is a good next task.
 3. **README.md is a spec/template, not current docs** — raw-schema table is stale, has a
    "Project Structure … to be generated" placeholder, and no setup/run/deploy instructions.
    Refresh it (or point it at this file).
-4. No CI / linter / pre-commit. Tests (6) pass and cover extract + raw mapping only; there
-   is no test for the Streamlit layer beyond dbt's own tests.
+4. **Yelp API terms vs. this design.** The Yelp API Terms of Use (version dated 2025-01-13, §5)
+   allow caching Yelp content for at most 24 hours (business IDs excepted) and forbid using it
+   to build your own database of business listings. The append-only raw table and quarterly
+   marts keep Yelp content far longer. This is the reason v2 (branch `v2-open-data`) moves to
+   Overture Maps + LA City open data. The dashboard now credits Yelp in the header; the Display
+   Requirements also ask for the Yelp logo and per-business links, which needs the Yelp `url`
+   field loaded (it is dropped in `src/load/bigquery_loader.py` today).
+5. CI (`.github/workflows/ci.yml`) runs pytest + `dbt parse` on every PR. No linter /
+   pre-commit yet. `dbt build` against BigQuery still runs only in the pipeline, not in CI.
+
+## Data-quality contract (added Oct 2026)
+
+- **Service area:** a restaurant is published only if state = CA, its ZIP3 is in
+  `seeds/service_area_zip3.csv` and its coordinates are inside the `service_area`
+  bounding box var. Failures go to `dq_restaurants_quarantine` with a reason, never
+  silently dropped. Triggered by real vendor errors (an Ohio Pizza Hut and a
+  "Monte Rio, CA" listing reached the public dashboard).
+- **Unrated restaurants:** Yelp returns rating 0 for no reviews; staging converts it
+  to NULL so it can't drag down averages. `is_rated` flags them in the dim.
+- **Anomaly gate:** `assert_quarantine_share_below_threshold` fails the run if more
+  than `max_quarantine_share` (2%) of open restaurants are quarantined.
+- **Raw layer (Soda):** freshness (warn > 100d, fail > 130d) and out-of-area count in
+  the latest batch. Soda exit code 1 (warnings only) no longer halts the pipeline;
+  2/3 still do (`src/orchestration/soda_exit.py`).
+- Keep the bounding box in `dbt_project.yml` and `soda/checks/...yml` in sync.
 
 ## Conventions
 

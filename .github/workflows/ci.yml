@@ -1,33 +1,37 @@
 name: CI
 
 on:
-  push:
-    branches: [ main, v2-open-data ]
   pull_request:
-    branches: [ main, v2-open-data ]
+  push:
+    branches: [main, v2-open-data]
 
 jobs:
-  check:
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Check Python syntax
         run: python -m compileall -q src app scripts
 
-      - name: Run unit tests
-        # Everything under tests/ mocks its API/BigQuery calls (see CLAUDE.md) — no
-        # network or GCP credentials needed, so nothing here is skipped.
+      # Everything under tests/ mocks its API/BigQuery calls, so no network or
+      # GCP credentials are needed and nothing is skipped.
+      - name: Unit tests
         run: python -m pytest -q tests
+
+      # Parses every model, seed, snapshot and test (v1 and v2, incl. Jinja/vars/refs)
+      # without a warehouse connection, so a broken ref or YAML typo fails the PR.
+      - name: dbt parse
+        env:
+          GCP_PROJECT_ID: ci-placeholder
+          BQ_DATASET_RAW: raw
+          BQ_DATASET_MART: mart
+        run: dbt parse --project-dir dbt_project --profiles-dir dbt_project

@@ -6,3 +6,18 @@ models:
       Applies city_alias_map to stg_yelp_restaurants' rule-cleaned city column,
       resolving known abbreviations/aliases (e.g. "W Hollywood") that
       whitespace/casing rules alone can't fix.
+
+  - name: int_restaurants_service_area
+    description: >
+      Tags every restaurant with is_in_service_area and, when false, a
+      service_area_issue reason. A record passes only if it has coordinates,
+      state = CA, a ZIP whose 3-digit prefix is in service_area_zip3, and
+      coordinates inside the service_area bounding box (dbt var).
+    columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
+      - name: is_in_service_area
+        tests:
+          - not_null
