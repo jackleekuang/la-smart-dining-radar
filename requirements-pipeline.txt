@@ -1,0 +1,12 @@
+# Packages the pipeline needs at run time on Prefect's managed work pool.
+# A subset of requirements.txt (no Streamlit/Folium/pytest) so each run installs faster.
+requests>=2.31.0
+python-dotenv>=1.0.0
+google-cloud-bigquery>=3.25.0
+db-dtypes>=1.2.0
+pandas>=2.2.0
+prefect>=3.0,<4
+dbt-core>=1.8.0
+dbt-bigquery>=1.8.0
+soda-core-bigquery>=3.3.0
+pyyaml>=6.0

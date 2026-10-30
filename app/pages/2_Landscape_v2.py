@@ -120,27 +120,80 @@ kpi4.metric("Conflicts", f"{status_counts.get('conflict', 0):,}")
 
 st.caption(" · ".join(f"**{STATUS_LABELS.get(s, s)}**: {n:,}" for s, n in status_counts.items()))
 
+# ---- All places: search and filter -------------------------------------------------------
+st.subheader("🔎 All places")
+f_search, f_status, f_zip = st.columns([2, 2, 1])
+search = f_search.text_input("Search name, address or category", placeholder="e.g. tacos, Sunset Blvd, ramen")
+present = [s for s in STATUS_LABELS if s in status_counts.index]
+statuses = f_status.multiselect("Status", present, format_func=lambda s: STATUS_LABELS[s])
+zip5 = dim_df["postcode"].astype("string").str[:5]
+zips = f_zip.multiselect("ZIP", sorted(zip5.dropna().unique()))
+
+mask = pd.Series(True, index=dim_df.index)
+if search:
+    needle = search.strip()
+    mask &= (
+        dim_df["place_name"].astype("string").str.contains(needle, case=False, regex=False, na=False)
+        | dim_df["street_address"].astype("string").str.contains(needle, case=False, regex=False, na=False)
+        | dim_df["primary_category"].astype("string").str.contains(needle, case=False, regex=False, na=False)
+    )
+if statuses:
+    mask &= dim_df["unified_status"].isin(statuses)
+if zips:
+    mask &= zip5.isin(zips)
+filtered = dim_df[mask]
+
+st.caption(f"{len(filtered):,} of {len(dim_df):,} places match. The map below follows these filters.")
+listing = filtered.assign(status=filtered["unified_status"].map(lambda s: STATUS_LABELS.get(s, s)))[
+    ["place_name", "primary_category", "street_address", "postcode", "status",
+     "match_confidence", "license_start_date", "license_end_date"]
+].sort_values(["place_name"])
+st.dataframe(
+    listing.reset_index(drop=True),
+    width="stretch",
+    height=420,
+    hide_index=True,
+    column_config={
+        "place_name": "Name",
+        "primary_category": "Category",
+        "street_address": "Address",
+        "postcode": "ZIP",
+        "status": "Status",
+        "match_confidence": "License match",
+        "license_start_date": "License start",
+        "license_end_date": "License end",
+    },
+)
+
+# ---- Map ---------------------------------------------------------------------------------
+st.subheader("Map")
+map_points = _sample_for_map(filtered)
+caption = "Colored by unified status. Panning/zooming does not rerun the app."
+if len(map_points) < len(filtered.dropna(subset=["lat", "lon"])):
+    caption += (
+        f" Showing {len(map_points):,} of {len(filtered):,} places (all conflicts and "
+        "closed-confirmed included; the rest sampled) — more would break the map."
+    )
+st.caption(caption)
+if map_points.empty:
+    st.caption("No places with coordinates match the filters.")
+else:
+    m = _build_map(map_points)
+    st_folium(m, height=600, use_container_width=True, returned_objects=[], key="landscape_map")
+
+# ---- Conflicts -----------------------------------------------------------------------------
 st.subheader("⚠️ Sources disagree")
-st.markdown("Map says open, LA City registry says the license ended — real closure or a bad match?")
+st.markdown(
+    f"**{status_counts.get('conflict', 0):,}** places where the map says open but the LA City "
+    "registry says the license ended — a real closure the map hasn't caught, or a bad match?"
+)
 conflicts = dim_df[dim_df["unified_status"] == "conflict"][
     ["place_name", "street_address", "postcode", "license_end_date", "match_score"]
 ].sort_values("license_end_date", ascending=False)
 if conflicts.empty:
     st.caption("No conflicts in the latest data.")
 else:
-    st.dataframe(conflicts.reset_index(drop=True), width="stretch")
-
-st.subheader("Map")
-map_points = _sample_for_map(dim_df)
-caption = "Colored by unified status. Panning/zooming does not rerun the app."
-if len(map_points) < len(dim_df):
-    caption += (
-        f" Showing {len(map_points):,} of {len(dim_df):,} places (all conflicts and "
-        "closed-confirmed included; the rest sampled) — more would break the map."
-    )
-st.caption(caption)
-m = _build_map(map_points)
-st_folium(m, height=600, use_container_width=True, returned_objects=[], key="landscape_map")
+    st.dataframe(conflicts.reset_index(drop=True), width="stretch", hide_index=True)
 
 st.subheader("Openings & closures by ZIP")
 n_releases = churn_df["snapshot_release"].nunique() if len(churn_df) else 0

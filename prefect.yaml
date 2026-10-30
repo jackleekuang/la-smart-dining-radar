@@ -1,0 +1,47 @@
+# Prefect deployments for DineRadar. Deploy with:  prefect --no-prompt deploy --all
+# (the GitHub Actions workflow .github/workflows/deploy-prefect.yml does this on every
+# push to main that touches the pipeline).
+#
+# Runs on the Prefect-managed (serverless) work pool `la-dining-radar-managed-pool`:
+# Prefect Cloud owns the schedule, starts a container, clones this repo at `main`,
+# installs requirements-pipeline.txt and runs the flow. Because every run clones `main`,
+# merged code is live at the next run without building an image.
+#
+# One-time setup in Prefect Cloud: a Secret block named `dineradar-gcp-sa-key` holding the
+# pipeline service account's key JSON (gcp-service-account.json).
+
+name: la-smart-dining-radar
+prefect-version: 3.0.0
+
+pull:
+  - prefect.deployments.steps.git_clone:
+      id: clone
+      repository: https://github.com/jackleekuang/la-smart-dining-radar.git
+      branch: main
+  - prefect.deployments.steps.set_working_directory:
+      directory: "{{ clone.directory }}"
+  - prefect.deployments.steps.pip_install_requirements:
+      directory: "{{ clone.directory }}"
+      requirements_file: requirements-pipeline.txt
+
+deployments:
+  - name: monthly
+    description: >
+      DineRadar 2.0. Snapshot the current Overture Places release and new LA City
+      licenses, Soda gate, dbt build. Overture publishes monthly; runs on the 8th.
+    entrypoint: src/orchestration/flows_v2.py:dineradar_v2
+    parameters: {}
+    tags: [dineradar, v2]
+    schedules:
+      - cron: "0 9 8 * *"
+        timezone: America/Los_Angeles
+        active: true
+    work_pool:
+      name: la-dining-radar-managed-pool
+      job_variables:
+        env:
+          GCP_PROJECT_ID: la-smart-dining-radar
+          BQ_DATASET_RAW: raw
+          BQ_DATASET_MART: mart
+          BQ_DATASET_SNAPSHOTS: snapshots
+          GCP_CREDENTIALS_JSON: "{{ prefect.blocks.secret.dineradar-gcp-sa-key }}"

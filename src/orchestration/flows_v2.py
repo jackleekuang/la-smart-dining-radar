@@ -15,12 +15,20 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import sys
 from pathlib import Path
+
+# Prefect's managed pool loads this file by path from a fresh git clone; make the
+# project root importable so `from src...` works there as it does locally.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import requests
 from google.cloud import bigquery
 from prefect import flow, get_run_logger, task
 
+from src.orchestration.runtime_env import materialize_gcp_credentials
 from src.observability.run_log import record_dbt_results, record_soda_results, track_step
 from src.v2 import bq, settings, socrata
 from src.v2.overture_sql import (
@@ -152,6 +160,7 @@ def dbt_build(select: str = "tag:v2") -> None:
 @flow(name="dineradar-v2-landscape")
 def dineradar_v2(force_overture: bool = False, full_refresh_la_city: bool = False) -> dict:
     """Snapshot Overture + incrementally load LA City → Soda gate → dbt build."""
+    materialize_gcp_credentials()
     overture = snapshot_overture(force_overture)
     la_rows = extract_load_la_city(full_refresh_la_city)
     soda_gate(["v2_raw_overture_places.yml", "v2_raw_la_city_businesses.yml"])
