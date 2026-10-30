@@ -43,3 +43,49 @@ def default_open_filter(now: datetime.datetime | None = None) -> tuple[int, date
     """
     current = (now or datetime.datetime.now(LA_TZ)).astimezone(LA_TZ)
     return current.weekday(), current.time().replace(second=0, microsecond=0)
+
+
+def map_points(restaurants: pd.DataFrame) -> list[list]:
+    """Rows for folium.FastMarkerCluster: [lat, lng, popup_html, tooltip].
+
+    Name, price and address are HTML-escaped (popup and tooltip) because they are
+    vendor-supplied text that Leaflet renders as HTML.
+    """
+    from html import escape
+
+    points: list[list] = []
+    cols = ["latitude", "longitude", "name", "rating", "review_count", "price", "address1", "city"]
+    for lat, lng, name, rating, reviews, price, address, city in restaurants[cols].itertuples(index=False):
+        if pd.isna(lat) or pd.isna(lng):
+            continue
+        reviews_text = "" if pd.isna(reviews) else f" ({int(reviews)} reviews)"
+        popup = (
+            f"<b>{escape(str(name))}</b><br>"
+            f"{format_rating(rating)}{reviews_text}<br>"
+            f"{escape(str(price))}<br>"
+            f"{escape(str(address))}, {escape(str(city))}"
+        )
+        points.append([float(lat), float(lng), popup, escape(str(name))])
+    return points
+
+
+def table_key(ids: pd.Series, prefix: str = "restaurant_table") -> str:
+    """Widget key that changes whenever the set of rows in the table changes.
+
+    st.dataframe keeps its row selection under its key across reruns. With a fixed
+    key, selecting row 1,500 and then filtering down to 20 rows left a stale
+    selection pointing past the end of the table (IndexError). Keying on the rows
+    shown resets the selection whenever a filter changes the table.
+    """
+    import hashlib
+
+    digest = hashlib.md5("|".join(ids.astype(str)).encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}_{digest}"
+
+
+def valid_selection(rows: list[int] | None, n_rows: int) -> int | None:
+    """First selected row position if it still exists in a table of n_rows, else None."""
+    for r in rows or []:
+        if 0 <= r < n_rows:
+            return r
+    return None
