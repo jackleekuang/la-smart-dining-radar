@@ -9,4 +9,6 @@ prefect>=3.0,<4
 dbt-core>=1.8.0
 dbt-bigquery>=1.8.0
 soda-core-bigquery>=3.3.0
+# Soda Core imports distutils, removed from Python 3.12+; setuptools provides it again.
+setuptools>=70
 pyyaml>=6.0
