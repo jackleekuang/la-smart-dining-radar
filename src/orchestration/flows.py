@@ -61,10 +61,10 @@ def soda_scan_task() -> None:
     """
     from src.orchestration.runtime_env import ensure_distutils
 
-    ensure_distutils()
-    from soda.scan import Scan
-
     with track_step(FLOW_NAME, "soda_scan") as step:
+        ensure_distutils()
+        from soda.scan import Scan
+
         scan = Scan()
         scan.set_data_source_name("dining_radar")
         scan.add_configuration_yaml_file(str(PROJECT_ROOT / "soda" / "configuration.yml"))

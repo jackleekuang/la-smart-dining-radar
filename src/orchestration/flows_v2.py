@@ -125,15 +125,17 @@ def _extract_load_la_city(full_refresh: bool) -> int:
 @task
 def soda_gate(checks_files: list[str]) -> None:
     """Fail the run before dbt if the raw layer breaks its contract (schema, freshness, volume)."""
-    ensure_distutils()
-    from soda.scan import Scan
-
-    scan = Scan()
-    scan.set_data_source_name("dining_radar")
-    scan.add_configuration_yaml_file(str(SODA_DIR / "configuration.yml"))
-    for name in checks_files:
-        scan.add_sodacl_yaml_file(str(SODA_DIR / "checks" / name))
+    # Everything inside track_step, so a failure while importing or configuring Soda is
+    # recorded as a failed step (it was not on 2026-10-30, when the distutils import failed).
     with track_step(FLOW_NAME, "soda_gate") as step:
+        ensure_distutils()
+        from soda.scan import Scan
+
+        scan = Scan()
+        scan.set_data_source_name("dining_radar")
+        scan.add_configuration_yaml_file(str(SODA_DIR / "configuration.yml"))
+        for name in checks_files:
+            scan.add_sodacl_yaml_file(str(SODA_DIR / "checks" / name))
         scan.execute()
         get_run_logger().info(scan.get_logs_text())
         step.detail = record_soda_results(FLOW_NAME, scan.get_scan_results())
