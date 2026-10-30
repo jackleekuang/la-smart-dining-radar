@@ -59,6 +59,9 @@ def soda_scan_task() -> None:
     Every check outcome is stored before that decision, so a stopped run still
     shows which check stopped it.
     """
+    from src.orchestration.runtime_env import ensure_distutils
+
+    ensure_distutils()
     from soda.scan import Scan
 
     with track_step(FLOW_NAME, "soda_scan") as step:
