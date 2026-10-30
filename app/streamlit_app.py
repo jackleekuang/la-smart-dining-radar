@@ -31,6 +31,8 @@ from src.app_helpers import (
     default_open_filter,
     map_points,
     restaurant_count_label,
+    table_key,
+    valid_selection,
 )
 from src.config import BQ_DATASET_MART, GCP_PROJECT_ID
 from src.load.bigquery_loader import get_bigquery_client
@@ -149,10 +151,12 @@ def render_table(filtered: pd.DataFrame, df: pd.DataFrame) -> None:
         on_select="rerun",
         selection_mode="single-row",
         column_order=DISPLAY_COLUMNS,
-        key="restaurant_table",
+        # A new key per set of rows resets the selection when a filter changes the table.
+        key=table_key(table["id"]),
     )
     selected_rows = event.selection.rows if event and event.selection else []
-    st.session_state.selected_id = table.iloc[selected_rows[0]]["id"] if selected_rows else None
+    row = valid_selection(selected_rows, len(table))
+    st.session_state.selected_id = table.iloc[row]["id"] if row is not None else None
 
     if st.button("🔍 Locate selected restaurant on map", disabled=st.session_state.selected_id is None):
         st.session_state.focus_id = st.session_state.selected_id
