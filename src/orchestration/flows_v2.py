@@ -28,7 +28,7 @@ import requests
 from google.cloud import bigquery
 from prefect import flow, get_run_logger, task
 
-from src.orchestration.runtime_env import materialize_gcp_credentials
+from src.orchestration.runtime_env import ensure_distutils, materialize_gcp_credentials
 from src.observability.run_log import record_dbt_results, record_soda_results, track_step
 from src.v2 import bq, settings, socrata
 from src.v2.overture_sql import (
@@ -125,6 +125,7 @@ def _extract_load_la_city(full_refresh: bool) -> int:
 @task
 def soda_gate(checks_files: list[str]) -> None:
     """Fail the run before dbt if the raw layer breaks its contract (schema, freshness, volume)."""
+    ensure_distutils()
     from soda.scan import Scan
 
     scan = Scan()

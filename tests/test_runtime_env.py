@@ -41,3 +41,11 @@ def test_rejects_garbage(monkeypatch):
     monkeypatch.setenv("GCP_CREDENTIALS_JSON", "not a key")
     with pytest.raises(ValueError):
         materialize_gcp_credentials()
+
+
+def test_ensure_distutils_makes_distutils_importable():
+    pytest.importorskip("setuptools")
+    from src.orchestration.runtime_env import ensure_distutils
+
+    ensure_distutils()
+    import distutils  # noqa: F401

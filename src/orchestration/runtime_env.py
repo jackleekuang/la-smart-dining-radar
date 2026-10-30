@@ -56,3 +56,20 @@ def materialize_gcp_credentials() -> str | None:
     os.chmod(path, 0o600)
     os.environ["GCP_CREDENTIALS_PATH"] = path
     return path
+
+
+def ensure_distutils() -> None:
+    """Make `import distutils` work before importing Soda Core on Python 3.12+.
+
+    Soda Core still imports distutils, which Python 3.12 removed. setuptools ships a
+    replacement, normally activated by a .pth file at interpreter start. On Prefect's
+    managed pool the packages are installed inside the already-running process, so the
+    .pth hook never fires; importing setuptools activates the same replacement directly.
+    """
+    import importlib
+
+    importlib.invalidate_caches()  # see packages installed after this process started
+    try:
+        import distutils  # noqa: F401
+    except ModuleNotFoundError:
+        import setuptools  # noqa: F401  (setuptools/__init__ installs the distutils shim)
