@@ -1,0 +1,59 @@
+# CD for the pipeline: after a merge to main, register the Prefect deployment again so
+# Prefect Cloud's schedule, parameters and job settings match prefect.yaml.
+#
+# The code itself needs no build step: every scheduled run clones `main`, so merged code
+# is live at the next run. The dashboard redeploys itself on Streamlit Community Cloud.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   PREFECT_API_KEY  a Prefect Cloud API key
+#   PREFECT_API_URL  https://api.prefect.cloud/api/accounts/<account_id>/workspaces/<workspace_id>
+# Without them the job is skipped instead of failing.
+
+name: Deploy to Prefect
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prefect.yaml"
+      - "requirements-pipeline.txt"
+      - "src/**"
+      - "dbt_project/**"
+      - "soda/**"
+      - ".github/workflows/deploy-prefect.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prefect
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PREFECT_API_KEY: ${{ secrets.PREFECT_API_KEY }}
+      PREFECT_API_URL: ${{ secrets.PREFECT_API_URL }}
+    steps:
+      - name: Skip when Prefect secrets are not configured
+        if: env.PREFECT_API_KEY == '' || env.PREFECT_API_URL == ''
+        run: echo "::notice::PREFECT_API_KEY / PREFECT_API_URL not set; skipping deploy."
+
+      - uses: actions/checkout@v4
+        if: env.PREFECT_API_KEY != '' && env.PREFECT_API_URL != ''
+
+      - uses: actions/setup-python@v5
+        if: env.PREFECT_API_KEY != '' && env.PREFECT_API_URL != ''
+        with:
+          python-version: "3.13"
+
+      - name: Install Prefect
+        if: env.PREFECT_API_KEY != '' && env.PREFECT_API_URL != ''
+        run: pip install "prefect>=3.0,<4"
+
+      - name: Register deployments
+        if: env.PREFECT_API_KEY != '' && env.PREFECT_API_URL != ''
+        run: prefect --no-prompt deploy --all
+
+      - name: Show the schedule Prefect now holds
+        if: env.PREFECT_API_KEY != '' && env.PREFECT_API_URL != ''
+        run: prefect deployment ls

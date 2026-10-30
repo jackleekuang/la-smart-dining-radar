@@ -176,7 +176,7 @@ steps are manual. Documenting/scripting them is a good next task.
 - Schedule lives in **Cloud Scheduler**, not Prefect: job `dining-radar-quarterly-trigger`,
   `0 6 1 1,4,7,10 *` America/Los_Angeles, target Cloud Run job `dining-radar-pipeline-job`
   (us-west2). Scheduler "Success" only means the job was triggered — check the job execution.
-  v2 has no schedule yet.
+  The Yelp API key expired (confirmed 2026-10-30), so v1 can no longer refresh.
 - **Incident 2026-10-01:** the scheduled run failed (two attempts). Yelp answered the first request with
   HTTP 400; `fetch_cell` treated any 400 as the offset cap (cap = -50), skipped every other
   query point and returned 0 rows, so `load` failed with "No rows present in the request".
@@ -184,6 +184,22 @@ steps are manual. Documenting/scripting them is a good next task.
   fails. The cause of the 400 itself is still unknown (body was discarded at the time).
 - Unverified: the Soda data source uses `account_info_json_path: ${GCP_CREDENTIALS_PATH}`,
   which is empty in Cloud Run (ADC). Not yet confirmed that Soda authenticates inside Cloud Run; check the next run's soda_scan row.
+
+## v2 schedule & CD (added 2026-10-30)
+
+- **Prefect owns the v2 schedule.** `prefect.yaml` defines deployment `dineradar-v2-landscape/monthly`
+  (cron `0 9 8 * *`, America/Los_Angeles) on the Prefect-managed work pool
+  `la-dining-radar-managed-pool` (free tier: 1 serverless pool, ~8 compute hours/month).
+- Each run clones `main`, installs `requirements-pipeline.txt` and runs
+  `src/orchestration/flows_v2.py:dineradar_v2`, so merged code is live at the next run (no image).
+- Credentials: Prefect Secret block `dineradar-gcp-sa-key` (pipeline SA key JSON) → env
+  `GCP_CREDENTIALS_JSON`; `runtime_env.materialize_gcp_credentials()` writes it to a temp key
+  file for dbt and Soda.
+- **CD:** `.github/workflows/deploy-prefect.yml` runs `prefect --no-prompt deploy --all` on pushes
+  to main that touch the pipeline. Needs repo secrets `PREFECT_API_KEY` and `PREFECT_API_URL`;
+  skipped without them. The dashboard is redeployed by Streamlit Community Cloud on its own.
+- Dataset names in `prefect.yaml` (`raw`, `mart`, `snapshots`) must match the ones the app and
+  the first run used.
 
 ## Conventions
 
